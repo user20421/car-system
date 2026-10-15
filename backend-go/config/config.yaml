@@ -1,0 +1,28 @@
+# 本地开发环境配置
+server:
+  port: 8080
+  mode: debug          # gin 运行模式: debug | release
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: root
+  dbname: car_system
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_minutes: 60
+
+redis:
+  addr: 127.0.0.1:6379
+  password: ""
+  db: 0
+
+rabbitmq:
+  url: amqp://car-system:car123456@127.0.0.1:5672/
+  telemetry_exchange: vehicle.data      # 车况数据 topic 交换机
+  telemetry_queue: telemetry.persist    # 异步落库队列
+
+jwt:
+  secret: car-system-local-dev-secret-key
+  expire_hours: 24

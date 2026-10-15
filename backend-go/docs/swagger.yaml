@@ -1,0 +1,239 @@
+basePath: /
+definitions:
+  internal_handler.AuthRequest:
+    properties:
+      password:
+        minLength: 6
+        type: string
+      username:
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  internal_handler.TelemetryRequest:
+    properties:
+      battery:
+        maximum: 100
+        minimum: 0
+        type: number
+      fault_code:
+        type: string
+      lat:
+        maximum: 90
+        minimum: -90
+        type: number
+      lng:
+        maximum: 180
+        minimum: -180
+        type: number
+      rpm:
+        minimum: 0
+        type: integer
+      speed:
+        minimum: 0
+        type: number
+      vin:
+        type: string
+    required:
+    - vin
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: user20421
+  description: 车联网系统后端接口文档：鉴权 / 车辆遥测 / 实时推送
+  title: Car System 车联网后端 API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 登录信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功，data.token 为 JWT
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数不合法
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 用户名或密码错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 用户登录
+      tags:
+      - 鉴权
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 注册信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 注册成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数不合法
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 用户名已存在
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 用户注册
+      tags:
+      - 鉴权
+  /api/v1/profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 JWT Claims
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未认证
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 当前用户信息
+      tags:
+      - 鉴权
+  /api/v1/vehicle:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为车辆数组
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 权限不足
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 车辆列表
+      tags:
+      - 车辆
+  /api/v1/vehicle/{vin}/telemetry/latest:
+    get:
+      parameters:
+      - description: 车架号 (17位)
+        in: path
+        name: vin
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为最新车况
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 车辆或数据不存在
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 查询最新车况
+      tags:
+      - 车辆
+  /api/v1/vehicle/telemetry:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 车况数据
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.TelemetryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上报成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数不合法
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 车辆不存在
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 车机上报车况
+      tags:
+      - 车辆
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 全部组件正常
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: 有组件异常
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 健康检查
+      tags:
+      - 系统
+securityDefinitions:
+  BearerAuth:
+    description: '格式: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
