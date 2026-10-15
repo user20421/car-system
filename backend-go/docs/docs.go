@@ -145,6 +145,111 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/simulator/start": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "模拟器"
+                ],
+                "summary": "启动虚拟车队",
+                "parameters": [
+                    {
+                        "description": "模拟参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/backend-go_internal_simulator.Params"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "已启动",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/simulator/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "模拟器"
+                ],
+                "summary": "虚拟车队状态",
+                "responses": {
+                    "200": {
+                        "description": "running + params",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/simulator/stop": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "模拟器"
+                ],
+                "summary": "停止虚拟车队",
+                "responses": {
+                    "200": {
+                        "description": "已停止",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/system/metrics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "后端实时性能指标",
+                "responses": {
+                    "200": {
+                        "description": "goroutines/内存/连接池/消息计数/队列深度",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/vehicle": {
             "get": {
                 "security": [
@@ -300,6 +405,23 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "backend-go_internal_simulator.Params": {
+            "type": "object",
+            "properties": {
+                "fault_rate": {
+                    "description": "0 ~ 0.1，每帧触发故障的概率",
+                    "type": "number"
+                },
+                "interval_ms": {
+                    "description": "100 ~ 5000",
+                    "type": "integer"
+                },
+                "vehicle_count": {
+                    "description": "1 ~ 50",
+                    "type": "integer"
+                }
+            }
+        },
         "internal_handler.AuthRequest": {
             "type": "object",
             "required": [

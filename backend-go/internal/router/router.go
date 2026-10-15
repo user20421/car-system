@@ -1,6 +1,9 @@
 package router
 
 import (
+	"time"
+
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -14,6 +17,15 @@ func Setup(mode string) *gin.Engine {
 	gin.SetMode(mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+
+	// CORS：允许本地开发的前端（Vue dev server / Flutter web）跨域访问
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// 公开接口
 	r.GET("/health", handler.HealthCheck)
@@ -42,6 +54,16 @@ func Setup(mode string) *gin.Engine {
 				vehicle.POST("/telemetry", handler.ReportTelemetry)          // 车机上报
 				vehicle.GET("/:vin/telemetry/latest", handler.GetLatestTelemetry) // 查询最新状态
 				vehicle.GET("", middleware.RequireRole("admin"), handler.ListVehicles) // 管理员列表
+			}
+
+			// 管理员专属：模拟器控制 + 系统指标
+			admin := protected.Group("")
+			admin.Use(middleware.RequireRole("admin"))
+			{
+				admin.POST("/simulator/start", handler.StartSimulator)
+				admin.POST("/simulator/stop", handler.StopSimulator)
+				admin.GET("/simulator/status", handler.SimulatorStatus)
+				admin.GET("/system/metrics", handler.GetSystemMetrics)
 			}
 		}
 	}

@@ -11,8 +11,7 @@ import (
 	"backend-go/internal/cache"
 	"backend-go/internal/database"
 	"backend-go/internal/model"
-	"backend-go/internal/mq"
-	"backend-go/internal/ws"
+	"backend-go/internal/service"
 )
 
 // TelemetryRequest 车机上报的车况数据
@@ -44,33 +43,10 @@ func ReportTelemetry(c *gin.Context) {
 		return
 	}
 
-	// 校验车辆存在
-	var vehicle model.Vehicle
-	if err := database.DB.Where("vin = ?", req.VIN).First(&vehicle).Error; err != nil {
+	if err := service.Ingest(service.TelemetryInput(req)); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在，请先登记"})
 		return
 	}
-
-	body, _ := json.Marshal(req)
-
-	// 1. 写 Redis：最新实时状态（TTL 5 分钟，防穿透）
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	if err := cache.RDB.Set(ctx, "vehicle:latest:"+req.VIN, body, 5*time.Minute).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 50003, "msg": "写入缓存失败"})
-		cancel()
-		return
-	}
-
-	// 2. 发布 RabbitMQ：异步落库（削峰填谷）
-	if err := mq.Client.PublishTelemetry(ctx, req.VIN, body); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 50004, "msg": "消息发布失败"})
-		cancel()
-		return
-	}
-	cancel()
-
-	// 3. WebSocket 广播：后台大屏/手机端实时接收
-	ws.GlobalHub.Broadcast(body)
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "上报成功"})
 }

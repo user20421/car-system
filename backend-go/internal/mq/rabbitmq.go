@@ -103,6 +103,20 @@ func (m *MQ) ConsumeTelemetry(ctx context.Context, handler func(body []byte) err
 	}
 }
 
+// QueueDepth 被动声明队列以查询积压消息数（失败返回 -1）
+func (m *MQ) QueueDepth() int {
+	ch, err := m.conn.Channel()
+	if err != nil {
+		return -1
+	}
+	defer ch.Close()
+	q, err := ch.QueueDeclarePassive(m.queue, true, false, false, false, nil)
+	if err != nil {
+		return -1
+	}
+	return q.Messages
+}
+
 // Close 关闭连接
 func (m *MQ) Close() {
 	if m.conn != nil {

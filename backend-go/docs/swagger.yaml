@@ -1,5 +1,17 @@
 basePath: /
 definitions:
+  backend-go_internal_simulator.Params:
+    properties:
+      fault_rate:
+        description: 0 ~ 0.1，每帧触发故障的概率
+        type: number
+      interval_ms:
+        description: 100 ~ 5000
+        type: integer
+      vehicle_count:
+        description: 1 ~ 50
+        type: integer
+    type: object
   internal_handler.AuthRequest:
     properties:
       password:
@@ -132,6 +144,69 @@ paths:
       summary: 当前用户信息
       tags:
       - 鉴权
+  /api/v1/simulator/start:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 模拟参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/backend-go_internal_simulator.Params'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 已启动
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 启动虚拟车队
+      tags:
+      - 模拟器
+  /api/v1/simulator/status:
+    get:
+      responses:
+        "200":
+          description: running + params
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 虚拟车队状态
+      tags:
+      - 模拟器
+  /api/v1/simulator/stop:
+    post:
+      responses:
+        "200":
+          description: 已停止
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 停止虚拟车队
+      tags:
+      - 模拟器
+  /api/v1/system/metrics:
+    get:
+      responses:
+        "200":
+          description: goroutines/内存/连接池/消息计数/队列深度
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 后端实时性能指标
+      tags:
+      - 系统
   /api/v1/vehicle:
     get:
       produces:

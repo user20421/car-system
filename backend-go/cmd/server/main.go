@@ -19,6 +19,7 @@ import (
 	"backend-go/internal/model"
 	"backend-go/internal/mq"
 	"backend-go/internal/router"
+	"backend-go/internal/service"
 	"backend-go/internal/ws"
 	"backend-go/pkg/logger"
 
@@ -138,7 +139,11 @@ func persistTelemetry(body []byte) error {
 		VehicleID: vehicle.ID, Speed: req.Speed, RPM: req.RPM,
 		Battery: req.Battery, Lat: req.Lat, Lng: req.Lng, FaultCode: req.FaultCode,
 	}
-	return database.DB.Create(&t).Error
+	if err := database.DB.Create(&t).Error; err != nil {
+		return err
+	}
+	service.MarkPersisted()
+	return nil
 }
 
 // seedData 初始化管理员账号与示例车辆
