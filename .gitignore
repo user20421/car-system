@@ -1,0 +1,193 @@
+# ============================================================
+# car-system 统一忽略规则
+# 覆盖: Vue/Node | Flutter/Dart | Qt/C++ | Go | IDE | OS | Docker
+# ============================================================
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- 编辑器 / IDE ----------
+.idea/
+*.iml
+*.suo
+*.user
+*.swp
+*.swo
+*~
+
+# VS Code（保留共享配置，忽略个人配置）
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# ---------- Vue / Node.js (admin-dashboard) ----------
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# 环境变量与日志（如需入库请用 .env.example）
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 包管理器缓存/锁文件冲突产物（保留 package-lock.json）
+.pnpm-store/
+
+# ---------- Flutter / Dart (flutter_application) ----------
+# Dart/Flutter 工具与包缓存
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# Flutter 版本元数据与临时文件
+.metadata
+*.lock
+!/pubspec.lock
+.flutter-plugins*
+**/doc/api/
+
+# Android 构建产物
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+**/android/.idea/
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+
+# iOS 构建产物
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Web / macOS / Linux / Windows 桌面端产物
+lib/generated_plugin_registrant.dart
+**/windows/flutter/generated_plugin_registrant.*
+**/windows/flutter/generated_plugin_registrant.cc
+**/linux/flutter/generated_plugin_registrant.*
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral/
+
+# ---------- Qt / C++ (car-qt) ----------
+# qmake / CMake 构建目录
+build-*/
+**/build/
+**/cmake-build-*/
+CMakeLists.txt.user
+CMakeLists.txt.user.*
+.qmake.stash
+.qtc_clangd/
+
+# qmake 生成的中间文件
+moc_*.cpp
+moc_*.h
+moc_*.o
+qrc_*.cpp
+ui_*.h
+*.moc
+
+# 编译产物
+*.o
+*.obj
+*.lo
+*.la
+*.al
+*.libs
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.lib
+*.a
+*.pdb
+*.ilk
+*.exp
+*.idb
+
+# Qt Creator 用户配置
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.pri
+
+# 调试/发布目录
+debug/
+release/
+*.Debug
+*.Release
+Makefile.Debug
+Makefile.Release
+object_script.*
+
+# ---------- Go (backend-go) ----------
+# 编译出的二进制（以项目名/常见名为准）
+/backend-go/*.exe
+/backend-go/*.exe~
+/backend-go/car-system
+/backend-go/backend-go
+*.test
+*.out
+/vendor/
+
+# Go 工作区文件（按需保留）
+go.work
+go.work.sum
+
+# ---------- Docker / 数据库 / 中间件数据 ----------
+# 防止本地数据库卷、日志被误提交
+data/
+mysql-data/
+redis-data/
+rabbitmq-data/
+*.pid
+*.seed
+
+# ---------- 其他常见垃圾 ----------
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+.cache/
+coverage/
