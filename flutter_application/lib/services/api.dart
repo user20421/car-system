@@ -73,6 +73,26 @@ class Api {
     return res.data['data']['id'];
   }
 
+  /// 车辆详情（含锁/空调状态）
+  static Future<Map<String, dynamic>?> getVehicle(String vin) async {
+    try {
+      final res = await _dio.get('/api/v1/vehicle/$vin');
+      return Map<String, dynamic>.from(res.data['data']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 车况历史（时间正序）
+  static Future<List<dynamic>> telemetryHistory(String vin, {int limit = 60}) async {
+    try {
+      final res = await _dio.get('/api/v1/vehicle/$vin/telemetry/history?limit=$limit');
+      return res.data['data'] ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// 指令历史
   static Future<List<dynamic>> commands(String vin, {int limit = 10}) async {
     final res = await _dio.get('/api/v1/vehicle/$vin/commands?limit=$limit');

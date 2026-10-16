@@ -29,10 +29,10 @@
     <div class="control-panel">
       <h3>🎮 远程控制</h3>
       <div class="cmd-buttons">
-        <button :disabled="sending" @click="sendCommand('lock')">🔒 锁车</button>
-        <button :disabled="sending" @click="sendCommand('unlock')">🔓 解锁</button>
-        <button :disabled="sending" @click="sendCommand('ac_on')">❄️ 开空调</button>
-        <button :disabled="sending" @click="sendCommand('ac_off')">💨 关空调</button>
+        <button :disabled="sending || !cmdEnabled('lock')" @click="sendCommand('lock')">🔒 锁车</button>
+        <button :disabled="sending || !cmdEnabled('unlock')" @click="sendCommand('unlock')">🔓 解锁</button>
+        <button :disabled="sending || !cmdEnabled('ac_on')" @click="sendCommand('ac_on')">❄️ 开空调</button>
+        <button :disabled="sending || !cmdEnabled('ac_off')" @click="sendCommand('ac_off')">💨 关空调</button>
         <button :disabled="sending" @click="sendCommand('honk')">📢 鸣笛</button>
       </div>
       <transition name="slide">
@@ -71,7 +71,24 @@ const vin = route.params.vin
 const sending = ref(false)
 const cmdFeedback = ref('')
 const commands = ref([])
+const vehicleInfo = ref({ locked: true, ac_on: false })
 let feedbackTimer = null
+
+// 按钮状态感知：与当前状态相同的操作不允许重复执行
+function cmdEnabled(cmd) {
+  if (cmd === 'lock') return !vehicleInfo.value.locked
+  if (cmd === 'unlock') return vehicleInfo.value.locked
+  if (cmd === 'ac_on') return !vehicleInfo.value.ac_on
+  if (cmd === 'ac_off') return vehicleInfo.value.ac_on
+  return true
+}
+
+async function loadVehicleInfo() {
+  try {
+    const res = await api.get(`/api/v1/vehicle/${vin}`)
+    vehicleInfo.value = res.data
+  } catch { /* 忽略 */ }
+}
 
 function cmdLabel(c) {
   return { lock: '🔒 锁车', unlock: '🔓 解锁', ac_on: '❄️ 开空调', ac_off: '💨 关空调', honk: '📢 鸣笛' }[c] || c
@@ -170,11 +187,12 @@ function connect() {
       const t = JSON.parse(e.data)
       if (t.vin !== vin) return // 只关注本车
       if (t.type === 'ack') {
-        // 车机执行回执 → 刷新指令历史并提示
+        // 车机执行回执 → 刷新指令历史、车辆状态并提示
         cmdFeedback.value = `车机已执行「${cmdLabel(t.command)}」✅`
         clearTimeout(feedbackTimer)
         feedbackTimer = setTimeout(() => (cmdFeedback.value = ''), 4000)
         loadCommands()
+        loadVehicleInfo()
         return
       }
       if (t.type === 'command') return
@@ -198,6 +216,7 @@ onMounted(() => {
   batteryChart.setOption(makeLineOption('电量 (%)', '#3fb950', '%'))
   connect()
   loadCommands()
+  loadVehicleInfo()
   window.addEventListener('resize', resizeAll)
 })
 

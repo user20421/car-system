@@ -26,11 +26,17 @@ class VehicleController : public QObject
     Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
     Q_PROPERTY(bool acOn READ acOn NOTIFY stateChanged)
     Q_PROPERTY(QString lastCommand READ lastCommand NOTIFY stateChanged)
+    Q_PROPERTY(QString tripTime READ tripTime NOTIFY dataChanged)
+    Q_PROPERTY(double tripDistance READ tripDistance NOTIFY dataChanged)
+    Q_PROPERTY(double tripAvgSpeed READ tripAvgSpeed NOTIFY dataChanged)
 
 public:
     explicit VehicleController(hal::IVehicleData *dataSource,
                                net::ApiClient *api,
                                QObject *parent = nullptr);
+
+    // 中控屏本地操作（仅限空调等车内合理操作，锁车/鸣笛仅远程）
+    Q_INVOKABLE void requestCommand(const QString &cmd) { m_api->sendCommand(cmd); }
 
     double speed() const { return m_frame.speed; }
     int rpm() const { return m_frame.rpm; }
@@ -43,6 +49,9 @@ public:
     bool locked() const { return m_locked; }
     bool acOn() const { return m_acOn; }
     QString lastCommand() const { return m_lastCommand; }
+    QString tripTime() const;
+    double tripDistance() const { return m_tripDistance; }
+    double tripAvgSpeed() const { return m_tripSeconds > 0 ? m_tripDistance / (m_tripSeconds / 3600.0) : 0.0; }
 
 signals:
     void dataChanged();
@@ -57,6 +66,8 @@ private:
     bool m_locked = true;
     bool m_acOn = false;
     QString m_lastCommand;
+    int m_tripSeconds = 0;        // 本次行程时长（秒）
+    double m_tripDistance = 0.0;  // 本次行程里程（km）
 };
 
 } // namespace core

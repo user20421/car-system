@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,6 +86,57 @@ func GetLatestTelemetry(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "source": "mysql", "data": t})
+}
+
+// GetVehicle 查询单个车辆信息
+// @Summary 车辆详情
+// @Tags 车辆
+// @Produce json
+// @Security BearerAuth
+// @Param vin path string true "车架号"
+// @Success 200 {object} map[string]any "data 为车辆信息"
+// @Router /api/v1/vehicle/{vin} [get]
+func GetVehicle(c *gin.Context) {
+	vin := c.Param("vin")
+	var v model.Vehicle
+	if err := database.DB.Where("vin = ?", vin).First(&v).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": v})
+}
+
+// GetTelemetryHistory 最近车况历史（用于曲线图）
+// @Summary 车况历史
+// @Tags 车辆
+// @Produce json
+// @Security BearerAuth
+// @Param vin path string true "车架号"
+// @Param limit query int false "条数(默认60, 最大300)"
+// @Success 200 {object} map[string]any "data 按时间正序"
+// @Router /api/v1/vehicle/{vin}/telemetry/history [get]
+func GetTelemetryHistory(c *gin.Context) {
+	vin := c.Param("vin")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "60"))
+	if limit <= 0 || limit > 300 {
+		limit = 60
+	}
+	var vehicle model.Vehicle
+	if err := database.DB.Where("vin = ?", vin).First(&vehicle).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在"})
+		return
+	}
+	var list []model.Telemetry
+	if err := database.DB.Where("vehicle_id = ?", vehicle.ID).
+		Order("id DESC").Limit(limit).Find(&list).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 50008, "msg": "查询失败"})
+		return
+	}
+	// 反转为时间正序
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": list, "total": len(list)})
 }
 
 // ListVehicles 车辆列表（管理员）

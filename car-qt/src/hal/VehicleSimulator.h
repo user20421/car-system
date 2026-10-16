@@ -23,12 +23,14 @@ public:
 
     void start() override;
     void stop() override;
+    void setAccessoryLoad(bool on) override { m_acLoad = on; }
 
 private slots:
     void tick();
 
 private:
     QTimer m_timer;
+    bool   m_acLoad = false;    // 空调负载
     int    m_tickCount = 0;
     double m_battery = 85.0;
     double m_lat = 31.2304;     // 上海市中心

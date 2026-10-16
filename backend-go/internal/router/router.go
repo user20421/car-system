@@ -61,6 +61,8 @@ func Setup(mode string) *gin.Engine {
 				vehicle.POST("/:vin/command", handler.SendVehicleCommand)     // 远程控车
 				vehicle.POST("/:vin/command/:id/ack", handler.AckVehicleCommand) // 车机执行回执
 				vehicle.GET("/:vin/commands", handler.ListVehicleCommands)   // 指令历史
+				vehicle.GET("/:vin/telemetry/history", handler.GetTelemetryHistory) // 车况历史曲线
+				vehicle.GET("/:vin", handler.GetVehicle)                     // 车辆详情
 			}
 
 			// 管理员专属：模拟器控制 + 系统指标

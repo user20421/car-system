@@ -32,6 +32,8 @@ public:
 
     void reportTelemetry(const hal::TelemetryFrame &frame);
     void ackCommand(uint id, const QString &status);
+    // 本车中控屏本地操作：走同一指令总线（HTTP → MQ → WS 回本车执行）
+    void sendCommand(const QString &command);
 
 signals:
     void onlineChanged(bool online);

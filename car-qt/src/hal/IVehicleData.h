@@ -32,6 +32,9 @@ public:
     virtual void start() = 0;   // 启动硬件采集
     virtual void stop() = 0;    // 停止采集
 
+    // 附件负载开关（如空调），影响能耗。默认空实现
+    virtual void setAccessoryLoad(bool /*on*/) {}
+
 signals:
     // 有新一帧车况数据
     void frameReady(const hal::TelemetryFrame &frame);

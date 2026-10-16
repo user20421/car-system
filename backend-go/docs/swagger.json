@@ -107,6 +107,31 @@
                 }
             }
         },
+        "/api/v1/my/vehicles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "我的车辆列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为车辆数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/profile": {
             "get": {
                 "security": [
@@ -329,6 +354,40 @@
                 }
             }
         },
+        "/api/v1/vehicle/{vin}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "车辆详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为车辆信息",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/vehicle/{vin}/command": {
             "post": {
                 "security": [
@@ -460,6 +519,46 @@
                 "responses": {
                     "200": {
                         "description": "指令列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vehicle/{vin}/telemetry/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "车况历史",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "条数(默认60, 最大300)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 按时间正序",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true

@@ -66,6 +66,18 @@ void ApiClient::onWsDisconnected()
     // 重连由 m_wsReconnectTimer 周期触发
 }
 
+// ===== 本车本地操作（走统一指令链路） =====
+
+void ApiClient::sendCommand(const QString &command)
+{
+    QNetworkRequest req(QUrl(QStringLiteral("%1/api/v1/vehicle/%2/command").arg(m_baseUrl, m_vin)));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setRawHeader("Authorization", "Bearer " + m_token.toUtf8());
+    QJsonObject body{{"command", command}};
+    auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
+}
+
 // ===== 指令回执 =====
 
 void ApiClient::ackCommand(uint id, const QString &status)

@@ -30,8 +30,11 @@ void VehicleSimulator::tick()
     const int rpm = speed < 1.0 ? 800 + rng->bounded(100)
                                 : int(1200 + speed * 25 + rng->bounded(-200, 200));
 
-    // ---- 电量：行驶耗电 0.02%/s，停车回充 0.05%/s ----
-    m_battery += (speed < 1.0 ? 0.05 : -0.02);
+    // ---- 电量：行驶耗电 0.02%/s，停车回充 0.05%/s；开空调额外 +0.03%/s 能耗 ----
+    double drain = (speed < 1.0 ? -0.05 : 0.02);
+    if (m_acLoad)
+        drain += 0.03;
+    m_battery -= drain;
     m_battery = qBound(15.0, m_battery, 100.0);
 
     // ---- GPS：小范围漂移 ----

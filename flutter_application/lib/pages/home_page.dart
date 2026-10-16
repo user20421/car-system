@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api.dart';
 import '../services/ws_service.dart';
 import 'login_page.dart';
@@ -26,6 +27,11 @@ class _HomePageState extends State<HomePage> {
   String? _feedback;
   Timer? _feedbackTimer;
 
+  // 历史曲线数据（speed / battery）
+  final List<FlSpot> _speedSpots = [];
+  final List<FlSpot> _batterySpots = [];
+  double _xCounter = 0;
+
   static const _cmdLabels = {
     'lock': '🔒 锁车',
     'unlock': '🔓 解锁',
@@ -46,7 +52,9 @@ class _HomePageState extends State<HomePage> {
     _load();
     _ws.connect();
     _sub = _ws.messages.listen(_onMessage);
-    _ws.connectionState.listen((on) => setState(() => _wsOnline = on));
+    _ws.connectionState.listen((on) {
+      if (mounted) setState(() => _wsOnline = on);
+    });
   }
 
   Future<void> _load() async {
@@ -61,9 +69,27 @@ class _HomePageState extends State<HomePage> {
         });
         final latest = await Api.latestTelemetry(_vin!);
         if (latest != null && mounted) setState(() => _latest = latest);
+        await _loadHistory();
         await _loadCommands();
       }
     } catch (_) {/* 后端未就绪时静默 */}
+  }
+
+  /// 拉取历史曲线
+  Future<void> _loadHistory() async {
+    if (_vin == null) return;
+    final history = await Api.telemetryHistory(_vin!, limit: 60);
+    if (!mounted) return;
+    setState(() {
+      _speedSpots.clear();
+      _batterySpots.clear();
+      _xCounter = 0;
+      for (final t in history) {
+        _speedSpots.add(FlSpot(_xCounter, (t['speed'] as num).toDouble()));
+        _batterySpots.add(FlSpot(_xCounter, (t['battery'] as num).toDouble()));
+        _xCounter++;
+      }
+    });
   }
 
   Future<void> _loadCommands() async {
@@ -76,7 +102,6 @@ class _HomePageState extends State<HomePage> {
     if (msg['vin'] != _vin) return;
     if (msg['type'] == 'ack') {
       _showFeedback('车机已执行「${_cmdLabels[msg['command']]}」✅');
-      // 同步车辆开关状态
       if (msg['command'] == 'lock') setState(() => _locked = true);
       if (msg['command'] == 'unlock') setState(() => _locked = false);
       if (msg['command'] == 'ac_on') setState(() => _acOn = true);
@@ -86,12 +111,33 @@ class _HomePageState extends State<HomePage> {
     }
     if (msg['type'] == 'command') return;
     if (msg.containsKey('speed')) {
-      setState(() => _latest = msg);
+      setState(() {
+        _latest = msg;
+        // 追加曲线点，保持最近 120 个点
+        _speedSpots.add(FlSpot(_xCounter, (msg['speed'] as num).toDouble()));
+        _batterySpots.add(FlSpot(_xCounter, (msg['battery'] as num).toDouble()));
+        _xCounter++;
+        while (_speedSpots.length > 120) {
+          _speedSpots.removeAt(0);
+          _batterySpots.removeAt(0);
+        }
+      });
+    }
+  }
+
+  /// 按钮状态感知：与当前状态相同的操作不允许重复执行
+  bool _cmdEnabled(String cmd) {
+    switch (cmd) {
+      case 'lock': return !_locked;
+      case 'unlock': return _locked;
+      case 'ac_on': return !_acOn;
+      case 'ac_off': return _acOn;
+      default: return true; // honk 永远可用
     }
   }
 
   Future<void> _sendCommand(String cmd) async {
-    if (_vin == null) return;
+    if (_vin == null || !_cmdEnabled(cmd)) return;
     try {
       await Api.sendCommand(_vin!, cmd);
       _showFeedback('指令「${_cmdLabels[cmd]}」已下发，等待车机执行...');
@@ -128,6 +174,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final battery = (_latest['battery'] as num?)?.toDouble() ?? 0;
+    final faultCode = (_latest['fault_code'] as String?) ?? '';
     return Scaffold(
       appBar: AppBar(
         title: const Text('🚗 我的爱车'),
@@ -157,6 +204,21 @@ class _HomePageState extends State<HomePage> {
                 ),
               )
             else ...[
+              // 故障告警横幅
+              if (faultCode.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.2),
+                    border: Border.all(color: Colors.redAccent),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('⚠️ 车辆故障告警：$faultCode，请尽快检修',
+                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                ),
+
               // 车况卡片
               Card(
                 child: Padding(
@@ -212,7 +274,32 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // 远程控制
+              // 车况曲线
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('📈 车况趋势（实时）',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      SizedBox(height: 160, child: _buildChart()),
+                      const SizedBox(height: 6),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _LegendDot(color: Color(0xFF4FC3F7), label: '车速 km/h'),
+                          SizedBox(width: 20),
+                          _LegendDot(color: Color(0xFF3FB950), label: '电量 %'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 远程控制（状态感知按钮）
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(18),
@@ -228,7 +315,7 @@ class _HomePageState extends State<HomePage> {
                         children: [
                           for (final e in _cmdLabels.entries)
                             OutlinedButton(
-                              onPressed: () => _sendCommand(e.key),
+                              onPressed: _cmdEnabled(e.key) ? () => _sendCommand(e.key) : null,
                               child: Text(e.value),
                             ),
                         ],
@@ -288,6 +375,45 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildChart() {
+    if (_speedSpots.length < 2) {
+      return const Center(child: Text('数据收集中...', style: TextStyle(color: Colors.grey)));
+    }
+    final minX = _speedSpots.first.x;
+    final maxX = _speedSpots.last.x;
+    return LineChart(
+      LineChartData(
+        minX: minX,
+        maxX: maxX,
+        minY: 0,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (_) => const FlLine(color: Color(0xFF21262D), strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: const FlTitlesData(show: false),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          _lineBar(_speedSpots, const Color(0xFF4FC3F7)),
+          _lineBar(_batterySpots, const Color(0xFF3FB950)),
+        ],
+      ),
+      duration: Duration.zero,
+    );
+  }
+
+  LineChartBarData _lineBar(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: color,
+      barWidth: 2,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(show: true, color: color.withOpacity(0.08)),
+    );
+  }
+
   Widget _stat(String label, String value) {
     return Column(
       children: [
@@ -306,6 +432,23 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(text, style: TextStyle(color: color, fontSize: 12)),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
     );
   }
 }

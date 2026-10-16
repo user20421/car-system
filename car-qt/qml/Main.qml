@@ -167,6 +167,88 @@ ApplicationWindow {
                 }
             }
 
+            // 车内控制面板（驾驶员本地操作，仅限空调）
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 108
+                radius: 8
+                color: "#161b22"
+                border.color: "#30363d"
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    Text { text: "🎛️ 车内控制"; color: "#8b949e"; font.pixelSize: 14; anchors.horizontalCenter: parent.horizontalCenter }
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 12
+
+                        // 开空调（已开则置灰）
+                        Rectangle {
+                            width: 110; height: 36; radius: 8
+                            color: vehicle.acOn ? "#21262d" : "#1f6feb"
+                            opacity: vehicle.acOn ? 0.5 : 1.0
+                            Text { anchors.centerIn: parent; text: "❄️ 开空调"; color: "white"; font.pixelSize: 13 }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !vehicle.acOn && vehicle.online
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: vehicle.requestCommand("ac_on")
+                            }
+                        }
+
+                        // 关空调（已关则置灰）
+                        Rectangle {
+                            width: 110; height: 36; radius: 8
+                            color: !vehicle.acOn ? "#21262d" : "#b06000"
+                            opacity: !vehicle.acOn ? 0.5 : 1.0
+                            Text { anchors.centerIn: parent; text: "💨 关空调"; color: "white"; font.pixelSize: 13 }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: vehicle.acOn && vehicle.online
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: vehicle.requestCommand("ac_off")
+                            }
+                        }
+                    }
+                    Text { text: "锁车/鸣笛请使用车主 App 远程操作"; color: "#6e7681"; font.pixelSize: 11; anchors.horizontalCenter: parent.horizontalCenter }
+                }
+            }
+
+            // 本次行程统计
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 110
+                radius: 8
+                color: "#161b22"
+                border.color: "#30363d"
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 10
+                    Text { text: "🛣️ 本次行程"; color: "#8b949e"; font.pixelSize: 14; anchors.horizontalCenter: parent.horizontalCenter }
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 28
+                        Column {
+                            spacing: 3
+                            Text { text: vehicle.tripTime; color: "#e6edf3"; font.pixelSize: 16; font.bold: true; font.family: "Consolas"; anchors.horizontalCenter: parent.horizontalCenter }
+                            Text { text: "时长"; color: "#6e7681"; font.pixelSize: 11; anchors.horizontalCenter: parent.horizontalCenter }
+                        }
+                        Column {
+                            spacing: 3
+                            Text { text: vehicle.tripDistance.toFixed(2) + " km"; color: "#e6edf3"; font.pixelSize: 16; font.bold: true; font.family: "Consolas"; anchors.horizontalCenter: parent.horizontalCenter }
+                            Text { text: "里程"; color: "#6e7681"; font.pixelSize: 11; anchors.horizontalCenter: parent.horizontalCenter }
+                        }
+                        Column {
+                            spacing: 3
+                            Text { text: vehicle.tripAvgSpeed.toFixed(1); color: "#e6edf3"; font.pixelSize: 16; font.bold: true; font.family: "Consolas"; anchors.horizontalCenter: parent.horizontalCenter }
+                            Text { text: "均速 km/h"; color: "#6e7681"; font.pixelSize: 11; anchors.horizontalCenter: parent.horizontalCenter }
+                        }
+                    }
+                }
+            }
+
             Item { Layout.fillHeight: true } // 弹簧
         }
     }

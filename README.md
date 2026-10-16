@@ -50,14 +50,19 @@
 - 📶 弱网韧性：断网离线缓存（上限 1000 条）+ 恢复后自动补传 + Token 过期自动重登
 - 🎛️ QML 仪表盘：自绘圆形仪表（车速/转速）、电量条、GPS、故障告警横幅、在线呼吸灯
 - 🎮 远程控车执行端：WebSocket 接收指令 → 模拟执行（锁车/空调/鸣笛）→ HTTP 回执
+- 🖥️ **中控屏本地控制**：驾驶员可在车机屏幕直接开关空调（锁车/鸣笛按真实权限逻辑仅限远程）
+- 🛣️ **行程统计**：行驶时长、累计里程、平均速度实时累计
+- ❄️ **空调能耗联动**：开启空调后电池掉电速度加快，模拟真实能耗
 
-### 远程控车链路（指令闭环）
+### 远程控车链路（统一指令总线）
 ```
-App/网页下发指令 → RabbitMQ(vehicle.control 交换机) → 分发消费者 → WebSocket 推送
+App/网页/车机中控屏下发指令 → RabbitMQ(vehicle.control 交换机) → 分发消费者 → WebSocket 推送
 → 车机执行 → HTTP 回执 → 更新指令状态+车辆状态 → WebSocket 广播回执 → 三端实时同步
 ```
 - 指令状态机：pending → sent → executed/failed，全程可追溯
 - 幂等设计：重复回执不重复更新
+- **状态感知按钮**：已上锁则「锁车」置灰、空调已开则「开空调」置灰（App/Web/车机三端一致）
+- 权限逻辑：锁车/鸣笛仅远程端可用；空调支持本地+远程双通道
 
 ### 管理后台（Vue）
 - 📊 **车队监控大屏**：多车总览（在线/离线/告警统计）+ 车辆卡片实时刷新 + 详情下钻
@@ -73,9 +78,18 @@ App/网页下发指令 → RabbitMQ(vehicle.control 交换机) → 分发消费�
 ### 车主 App（Flutter）
 - 📱 车主视角：登录后仅见名下车辆（`/api/v1/my/vehicles`）
 - ⚡ WebSocket 实时车况 + 远程控车 + 指令历史
+- 📈 fl_chart 车况趋势曲线（车速/电量，历史数据 + 实时追加）
+- ⚠️ 故障码实时告警横幅
+- 🎮 状态感知控车按钮（与车辆当前状态相同的操作自动置灰）
 - 🔐 Token 本地持久化（shared_preferences）、Dio 拦截器统一鉴权
 
 ## 快速开始
+
+### 一键启动（推荐）
+
+双击项目根目录的 **`启动系统.bat`**，自动按序拉起：Docker 中间件 → Go 后端 → Qt 车机 → Vue 后台 → Flutter App。
+
+### 手动分步启动
 
 ### 1. 启动中间件
 
@@ -140,6 +154,8 @@ flutter run -d chrome --web-port=5000   # http://localhost:5000
 | POST | `/api/v1/auth/login` | 登录 | - |
 | POST | `/api/v1/vehicle/telemetry` | 车况上报 | JWT |
 | GET | `/api/v1/vehicle/:vin/telemetry/latest` | 最新车况（Redis 优先） | JWT |
+| GET | `/api/v1/vehicle/:vin` | 车辆详情（含锁/空调状态） | JWT |
+| GET | `/api/v1/vehicle/:vin/telemetry/history` | 车况历史（曲线用） | JWT |
 | POST | `/api/v1/vehicle/:vin/command` | 远程控车 | JWT |
 | POST | `/api/v1/vehicle/:vin/command/:id/ack` | 车机执行回执 | JWT |
 | GET | `/api/v1/vehicle/:vin/commands` | 指令历史 | JWT |

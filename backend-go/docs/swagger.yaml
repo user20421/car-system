@@ -147,6 +147,21 @@ paths:
       summary: 用户注册
       tags:
       - 鉴权
+  /api/v1/my/vehicles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为车辆数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 我的车辆列表
+      tags:
+      - 车辆
   /api/v1/profile:
     get:
       produces:
@@ -250,6 +265,27 @@ paths:
       summary: 车辆列表
       tags:
       - 车辆
+  /api/v1/vehicle/{vin}:
+    get:
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为车辆信息
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 车辆详情
+      tags:
+      - 车辆
   /api/v1/vehicle/{vin}/command:
     post:
       consumes:
@@ -338,6 +374,31 @@ paths:
       summary: 指令历史
       tags:
       - 控车
+  /api/v1/vehicle/{vin}/telemetry/history:
+    get:
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      - description: 条数(默认60, 最大300)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 按时间正序
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 车况历史
+      tags:
+      - 车辆
   /api/v1/vehicle/{vin}/telemetry/latest:
     get:
       parameters:
