@@ -84,6 +84,13 @@ func main() {
 		}
 	}()
 
+	// 8.1 启动控车指令分发消费者（MQ → WebSocket 推送给车机）
+	go func() {
+		if err := mq.Client.ConsumeControl(consumerCtx, "control.dispatch", nil, "control-dispatcher", service.DispatchCommand); err != nil {
+			logger.L.Error("控车分发消费者异常退出", zap.Error(err))
+		}
+	}()
+
 	// 9. 启动 WebSocket Hub
 	go ws.GlobalHub.Run()
 

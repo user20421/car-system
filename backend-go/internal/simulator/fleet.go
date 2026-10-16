@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 
 	"backend-go/internal/database"
 	"backend-go/internal/model"
+	"backend-go/internal/mq"
 	"backend-go/internal/service"
 	"backend-go/pkg/logger"
 )
@@ -92,6 +94,27 @@ func (f *Fleet) Start(p Params) error {
 	for _, st := range states {
 		go f.runVehicle(ctx, st)
 	}
+
+	// 虚拟车控车指令消费者：按每辆车的 VIN 精确绑定，模拟执行后自动回执
+	bindingKeys := make([]string, 0, len(states))
+	for _, st := range states {
+		bindingKeys = append(bindingKeys, "vehicle.control."+st.vin)
+	}
+	go func() {
+		err := mq.Client.ConsumeControl(ctx, "", bindingKeys, "sim-fleet-executor",
+			func(body []byte) error {
+				var msg service.ControlMessage
+				if err := json.Unmarshal(body, &msg); err != nil {
+					return err
+				}
+				// 模拟车机执行耗时 1~2 秒后回执
+				time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second)
+				return service.AckCommand(msg.VIN, msg.ID, "executed")
+			})
+		if err != nil {
+			logger.L.Warn("虚拟车队控车消费者退出", zap.Error(err))
+		}
+	}()
 	logger.L.Info("虚拟车队已启动",
 		zap.Int("vehicles", p.VehicleCount),
 		zap.Int("interval_ms", p.IntervalMs),

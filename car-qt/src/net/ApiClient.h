@@ -4,6 +4,7 @@
 #include <QQueue>
 #include <QTimer>
 #include <QNetworkAccessManager>
+#include <QWebSocket>
 #include "hal/IVehicleData.h"
 
 namespace net {
@@ -30,14 +31,19 @@ public:
     int  pendingCount() const { return m_pending.size(); }
 
     void reportTelemetry(const hal::TelemetryFrame &frame);
+    void ackCommand(uint id, const QString &status);
 
 signals:
     void onlineChanged(bool online);
     void pendingCountChanged(int count);
+    // 收到控车指令（id, command）
+    void commandReceived(uint id, const QString &command);
 
 private slots:
     void heartbeat();
     void flushPending();
+    void onWsTextMessage(const QString &message);
+    void onWsDisconnected();
 
 private:
     void login();
@@ -45,8 +51,11 @@ private:
     QByteArray toJson(const hal::TelemetryFrame &frame) const;
     void setOnline(bool on);
     void setPendingCount(int n);
+    void connectWs();
 
     QNetworkAccessManager m_nam;
+    QWebSocket m_ws;                       // 指令接收通道
+    QTimer m_wsReconnectTimer;
     QTimer m_heartbeatTimer;
     QTimer m_flushTimer;
     QQueue<QByteArray> m_pending;      // 离线缓存队列（上限 1000 条）

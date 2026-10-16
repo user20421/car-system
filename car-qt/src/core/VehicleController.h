@@ -23,6 +23,9 @@ class VehicleController : public QObject
     Q_PROPERTY(QString faultCode READ faultCode NOTIFY dataChanged)
     Q_PROPERTY(bool online READ online NOTIFY onlineChanged)
     Q_PROPERTY(int pendingCount READ pendingCount NOTIFY pendingChanged)
+    Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
+    Q_PROPERTY(bool acOn READ acOn NOTIFY stateChanged)
+    Q_PROPERTY(QString lastCommand READ lastCommand NOTIFY stateChanged)
 
 public:
     explicit VehicleController(hal::IVehicleData *dataSource,
@@ -37,16 +40,23 @@ public:
     QString faultCode() const { return m_frame.faultCode; }
     bool online() const { return m_api->online(); }
     int pendingCount() const { return m_api->pendingCount(); }
+    bool locked() const { return m_locked; }
+    bool acOn() const { return m_acOn; }
+    QString lastCommand() const { return m_lastCommand; }
 
 signals:
     void dataChanged();
     void onlineChanged();
     void pendingChanged();
+    void stateChanged();
 
 private:
     hal::TelemetryFrame m_frame;
     hal::IVehicleData *m_dataSource;
     net::ApiClient *m_api;
+    bool m_locked = true;
+    bool m_acOn = false;
+    QString m_lastCommand;
 };
 
 } // namespace core

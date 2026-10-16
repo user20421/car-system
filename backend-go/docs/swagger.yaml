@@ -12,6 +12,16 @@ definitions:
         description: 1 ~ 50
         type: integer
     type: object
+  internal_handler.AckRequest:
+    properties:
+      status:
+        enum:
+        - executed
+        - failed
+        type: string
+    required:
+    - status
+    type: object
   internal_handler.AuthRequest:
     properties:
       password:
@@ -24,6 +34,19 @@ definitions:
     required:
     - password
     - username
+    type: object
+  internal_handler.CommandRequest:
+    properties:
+      command:
+        enum:
+        - lock
+        - unlock
+        - ac_on
+        - ac_off
+        - honk
+        type: string
+    required:
+    - command
     type: object
   internal_handler.TelemetryRequest:
     properties:
@@ -227,6 +250,94 @@ paths:
       summary: 车辆列表
       tags:
       - 车辆
+  /api/v1/vehicle/{vin}/command:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      - description: '指令: lock/unlock/ac_on/ac_off/honk'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 指令已下发
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 远程控车
+      tags:
+      - 控车
+  /api/v1/vehicle/{vin}/command/{id}/ack:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      - description: 指令ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: '回执: executed/failed'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AckRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 回执已记录
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 指令执行回执
+      tags:
+      - 控车
+  /api/v1/vehicle/{vin}/commands:
+    get:
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      - description: 条数(默认20)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 指令列表
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 指令历史
+      tags:
+      - 控车
   /api/v1/vehicle/{vin}/telemetry/latest:
     get:
       parameters:

@@ -335,6 +335,145 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/vehicle/{vin}/command": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "控车"
+                ],
+                "summary": "远程控车",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "指令: lock/unlock/ac_on/ac_off/honk",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CommandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "指令已下发",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vehicle/{vin}/command/{id}/ack": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "控车"
+                ],
+                "summary": "指令执行回执",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "指令ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "回执: executed/failed",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.AckRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "回执已记录",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/vehicle/{vin}/commands": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "控车"
+                ],
+                "summary": "指令历史",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "条数(默认20)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "指令列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/vehicle/{vin}/telemetry/latest": {
             "get": {
                 "security": [
@@ -422,6 +561,21 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.AckRequest": {
+            "type": "object",
+            "required": [
+                "status"
+            ],
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "executed",
+                        "failed"
+                    ]
+                }
+            }
+        },
         "internal_handler.AuthRequest": {
             "type": "object",
             "required": [
@@ -437,6 +591,24 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 3
+                }
+            }
+        },
+        "internal_handler.CommandRequest": {
+            "type": "object",
+            "required": [
+                "command"
+            ],
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "enum": [
+                        "lock",
+                        "unlock",
+                        "ac_on",
+                        "ac_off",
+                        "honk"
+                    ]
                 }
             }
         },

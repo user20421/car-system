@@ -1,6 +1,7 @@
 package router
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -18,9 +19,11 @@ func Setup(mode string) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
-	// CORS：允许本地开发的前端（Vue dev server / Flutter web）跨域访问
+	// CORS：本地开发允许所有 localhost 来源（Vue dev server / Flutter web 端口不固定）
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174"},
+		AllowOriginFunc: func(origin string) bool {
+			return strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -47,6 +50,7 @@ func Setup(mode string) *gin.Engine {
 		protected.Use(middleware.JWTAuth())
 		{
 			protected.GET("/profile", handler.Profile)
+			protected.GET("/my/vehicles", handler.MyVehicles) // 车主：我的车辆
 
 			// 车辆
 			vehicle := protected.Group("/vehicle")
@@ -54,6 +58,9 @@ func Setup(mode string) *gin.Engine {
 				vehicle.POST("/telemetry", handler.ReportTelemetry)          // 车机上报
 				vehicle.GET("/:vin/telemetry/latest", handler.GetLatestTelemetry) // 查询最新状态
 				vehicle.GET("", middleware.RequireRole("admin"), handler.ListVehicles) // 管理员列表
+				vehicle.POST("/:vin/command", handler.SendVehicleCommand)     // 远程控车
+				vehicle.POST("/:vin/command/:id/ack", handler.AckVehicleCommand) // 车机执行回执
+				vehicle.GET("/:vin/commands", handler.ListVehicleCommands)   // 指令历史
 			}
 
 			// 管理员专属：模拟器控制 + 系统指标

@@ -142,7 +142,68 @@ ApplicationWindow {
                 }
             }
 
+            // 车门锁 / 空调状态
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 90
+                radius: 8
+                color: "#161b22"
+                border.color: "#30363d"
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 40
+
+                    Column {
+                        spacing: 6
+                        Text { text: vehicle.locked ? "🔒" : "🔓"; font.pixelSize: 26; anchors.horizontalCenter: parent.horizontalCenter }
+                        Text { text: vehicle.locked ? "已上锁" : "已解锁"; color: vehicle.locked ? "#3fb950" : "#d29922"; font.pixelSize: 13; anchors.horizontalCenter: parent.horizontalCenter }
+                    }
+                    Column {
+                        spacing: 6
+                        Text { text: vehicle.acOn ? "❄️" : "🌡️"; font.pixelSize: 26; anchors.horizontalCenter: parent.horizontalCenter }
+                        Text { text: vehicle.acOn ? "空调开" : "空调关"; color: vehicle.acOn ? "#4fc3f7" : "#8b949e"; font.pixelSize: 13; anchors.horizontalCenter: parent.horizontalCenter }
+                    }
+                }
+            }
+
             Item { Layout.fillHeight: true } // 弹簧
+        }
+    }
+
+    // ===== 指令执行提示 =====
+    Rectangle {
+        id: cmdToast
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: footer.top
+        anchors.bottomMargin: 16
+        width: toastText.width + 40
+        height: 44
+        radius: 22
+        color: "#1f6feb"
+        opacity: 0
+
+        property string text: ""
+        onTextChanged: {
+            if (text !== "") {
+                showAnim.restart()
+            }
+        }
+
+        Text {
+            id: toastText
+            anchors.centerIn: parent
+            text: cmdToast.text
+            color: "white"
+            font.pixelSize: 15
+            font.bold: true
+        }
+
+        SequentialAnimation {
+            id: showAnim
+            NumberAnimation { target: cmdToast; property: "opacity"; to: 1; duration: 200 }
+            PauseAnimation { duration: 2200 }
+            NumberAnimation { target: cmdToast; property: "opacity"; to: 0; duration: 400 }
         }
     }
 
@@ -159,6 +220,15 @@ ApplicationWindow {
             text: "HAL: VehicleSimulator (模拟硬件)  |  上报周期: 1s  |  通道: HTTP → RabbitMQ → MySQL / Redis / WebSocket"
             color: "#6e7681"
             font.pixelSize: 12
+        }
+    }
+
+    // 指令执行 → 弹出提示
+    Connections {
+        target: vehicle
+        function onStateChanged() {
+            if (vehicle.lastCommand !== "")
+                cmdToast.text = vehicle.lastCommand
         }
     }
 }

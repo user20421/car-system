@@ -20,6 +20,19 @@ VehicleController::VehicleController(hal::IVehicleData *dataSource,
     // 网络状态 → 界面
     connect(m_api, &net::ApiClient::onlineChanged, this, &VehicleController::onlineChanged);
     connect(m_api, &net::ApiClient::pendingCountChanged, this, &VehicleController::pendingChanged);
+
+    // 控车指令 → 模拟执行 → 回执
+    connect(m_api, &net::ApiClient::commandReceived,
+            this, [this](uint id, const QString &cmd) {
+        // 模拟车机执行指令
+        if (cmd == "lock")        { m_locked = true;  m_lastCommand = "🔒 车门已上锁"; }
+        else if (cmd == "unlock") { m_locked = false; m_lastCommand = "🔓 车门已解锁"; }
+        else if (cmd == "ac_on")  { m_acOn = true;    m_lastCommand = "❄️ 空调已开启"; }
+        else if (cmd == "ac_off") { m_acOn = false;   m_lastCommand = "💨 空调已关闭"; }
+        else if (cmd == "honk")   { m_lastCommand = "📢 鸣笛！"; }
+        emit stateChanged();
+        m_api->ackCommand(id, "executed");
+    });
 }
 
 } // namespace core

@@ -46,7 +46,78 @@ func Init(cfg config.RabbitMQConfig) error {
 	if err := ch.QueueBind(cfg.TelemetryQueue, "vehicle.telemetry.#", cfg.TelemetryExchange, false, nil); err != nil {
 		return fmt.Errorf("绑定队列失败: %w", err)
 	}
+
+	// 控车指令交换机 + 分发队列（车机/模拟器各自绑定 vehicle.control.<vin>）
+	if err := ch.ExchangeDeclare("vehicle.control", "topic", true, false, false, false, nil); err != nil {
+		return fmt.Errorf("声明控车交换机失败: %w", err)
+	}
+	if _, err := ch.QueueDeclare("control.dispatch", true, false, false, false, nil); err != nil {
+		return fmt.Errorf("声明控车分发队列失败: %w", err)
+	}
+	if err := ch.QueueBind("control.dispatch", "vehicle.control.#", "vehicle.control", false, nil); err != nil {
+		return fmt.Errorf("绑定控车分发队列失败: %w", err)
+	}
 	return nil
+}
+
+// PublishControl 发布控车指令（routing key: vehicle.control.<vin>）
+func (m *MQ) PublishControl(ctx context.Context, vin string, body []byte) error {
+	ch, err := m.conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+	return ch.PublishWithContext(ctx,
+		"vehicle.control",
+		"vehicle.control."+vin,
+		false, false,
+		amqp.Publishing{
+			DeliveryMode: amqp.Persistent,
+			ContentType:  "application/json",
+			Body:         body,
+			Timestamp:    time.Now(),
+		})
+}
+
+// ConsumeControl 消费控车相关队列；queue 为空时创建临时排他队列并按 bindingKeys 逐个绑定
+func (m *MQ) ConsumeControl(ctx context.Context, queue string, bindingKeys []string, consumerTag string, handler func(body []byte) error) error {
+	ch, err := m.conn.Channel()
+	if err != nil {
+		return err
+	}
+	if queue == "" {
+		// 临时排他队列（如模拟车队），按 VIN 精确绑定
+		q, err := ch.QueueDeclare("", false, true, true, false, nil)
+		if err != nil {
+			return err
+		}
+		queue = q.Name
+		for _, key := range bindingKeys {
+			if err := ch.QueueBind(queue, key, "vehicle.control", false, nil); err != nil {
+				return err
+			}
+		}
+	}
+	msgs, err := ch.Consume(queue, consumerTag, false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			_ = ch.Close()
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
+				return fmt.Errorf("消息通道被关闭")
+			}
+			if err := handler(msg.Body); err != nil {
+				_ = msg.Nack(false, false)
+			} else {
+				_ = msg.Ack(false)
+			}
+		}
+	}
 }
 
 // PublishTelemetry 发布车况数据（routing key: vehicle.telemetry.<vin>）

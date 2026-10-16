@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Network)
+find_package(Qt6 REQUIRED COMPONENTS Quick Network WebSockets)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -31,4 +31,4 @@ qt_add_qml_module(car-qt
         qml/BatteryBar.qml
 )
 
-target_link_libraries(car-qt PRIVATE Qt6::Quick Qt6::Network)
+target_link_libraries(car-qt PRIVATE Qt6::Quick Qt6::Network Qt6::WebSockets)

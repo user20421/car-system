@@ -9,10 +9,11 @@
   │  car-qt       │  HTTP+JWT 车况上报  │                  │
   │  Qt 车机端     │ ─────────────────► │                  │ ◄───── admin-dashboard
   │  (QML 仪表盘)  │                    │   backend-go      │  WebSocket   Vue 管理后台
-  └──────────────┘                    │   Go 后端          │             (监控大屏/控制台)
-  ┌──────────────┐                    │   Gin+GORM+JWT     │
-  │  虚拟车队引擎   │  内置数据管道        │                  │ ◄───── flutter_application
-  │  (后端内置)    │ ─────────────────► │                  │             Flutter 手机端（规划中）
+  └──────┬───────┘  WebSocket 接收指令  │   Go 后端          │             (监控大屏/控制台)
+         │ ◄────────────────────────── │   Gin+GORM+JWT     │
+  ┌──────┴───────┐                    │                  │ ◄───── flutter_application
+  │  虚拟车队引擎   │  内置数据管道        │                  │  REST+WS    Flutter 车主 App
+  │  (后端内置)    │ ─────────────────► │                  │             (车况查看+远程控车)
   └──────────────┘                    └───────┬───────────┘
                                               │
                               ┌───────────────┼───────────────┐
@@ -30,7 +31,7 @@
 | `backend-go/` | 后端中枢 | Go 1.27 + Gin + GORM + go-redis + amqp091 + zap + JWT + Swagger |
 | `car-qt/` | 车机端（模拟硬件） | Qt 6.11 + QML 仪表盘 + C++ HAL 硬件抽象层 |
 | `admin-dashboard/` | 运营管理后台 | Vue 3 + Vite + Pinia + Vue Router + ECharts + Axios |
-| `flutter_application/` | 车主手机端 | Flutter 3.47（规划中） |
+| `flutter_application/` | 车主手机端 | Flutter 3.47 + Dio + WebSocket + shared_preferences |
 
 ## 核心特性（企业级看点）
 
@@ -48,6 +49,15 @@
 - 🧩 **HAL 硬件抽象层**：`IVehicleData` 接口，本地用 `VehicleSimulator` 模拟，换真车硬件只需替换实现类
 - 📶 弱网韧性：断网离线缓存（上限 1000 条）+ 恢复后自动补传 + Token 过期自动重登
 - 🎛️ QML 仪表盘：自绘圆形仪表（车速/转速）、电量条、GPS、故障告警横幅、在线呼吸灯
+- 🎮 远程控车执行端：WebSocket 接收指令 → 模拟执行（锁车/空调/鸣笛）→ HTTP 回执
+
+### 远程控车链路（指令闭环）
+```
+App/网页下发指令 → RabbitMQ(vehicle.control 交换机) → 分发消费者 → WebSocket 推送
+→ 车机执行 → HTTP 回执 → 更新指令状态+车辆状态 → WebSocket 广播回执 → 三端实时同步
+```
+- 指令状态机：pending → sent → executed/failed，全程可追溯
+- 幂等设计：重复回执不重复更新
 
 ### 管理后台（Vue）
 - 📊 **车队监控大屏**：多车总览（在线/离线/告警统计）+ 车辆卡片实时刷新 + 详情下钻
@@ -58,6 +68,12 @@
 ### 虚拟车队引擎（后端内置）
 - 控制面/数据面分离：通过 API 热启动/停止/调参
 - 每辆车独立 goroutine，模拟巡航车速、电量消耗/回充、GPS 漂移、随机故障码
+- 虚拟车自动执行控车指令并回执（按 VIN 精确绑定队列）
+
+### 车主 App（Flutter）
+- 📱 车主视角：登录后仅见名下车辆（`/api/v1/my/vehicles`）
+- ⚡ WebSocket 实时车况 + 远程控车 + 指令历史
+- 🔐 Token 本地持久化（shared_preferences）、Dio 拦截器统一鉴权
 
 ## 快速开始
 
@@ -99,6 +115,14 @@ cmake --build build
 .\启动车机.ps1
 ```
 
+### 5. 启动车主 App（Flutter）
+
+```powershell
+cd flutter_application
+flutter pub get
+flutter run -d chrome --web-port=5000   # http://localhost:5000
+```
+
 ## 默认账号
 
 | 账号 | 密码 | 角色 | 用途 |
@@ -116,6 +140,10 @@ cmake --build build
 | POST | `/api/v1/auth/login` | 登录 | - |
 | POST | `/api/v1/vehicle/telemetry` | 车况上报 | JWT |
 | GET | `/api/v1/vehicle/:vin/telemetry/latest` | 最新车况（Redis 优先） | JWT |
+| POST | `/api/v1/vehicle/:vin/command` | 远程控车 | JWT |
+| POST | `/api/v1/vehicle/:vin/command/:id/ack` | 车机执行回执 | JWT |
+| GET | `/api/v1/vehicle/:vin/commands` | 指令历史 | JWT |
+| GET | `/api/v1/my/vehicles` | 我的车辆（车主） | JWT |
 | GET | `/api/v1/vehicle` | 车辆列表 | JWT + admin |
 | POST | `/api/v1/simulator/start` | 启动虚拟车队 | JWT + admin |
 | POST | `/api/v1/simulator/stop` | 停止虚拟车队 | JWT + admin |

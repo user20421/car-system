@@ -51,7 +51,7 @@ func Init(cfg config.MySQLConfig, mode string) error {
 	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeMinutes) * time.Minute)
 
 	// 4. 自动迁移表结构
-	if err := DB.AutoMigrate(&model.User{}, &model.Vehicle{}, &model.Telemetry{}); err != nil {
+	if err := DB.AutoMigrate(&model.User{}, &model.Vehicle{}, &model.Telemetry{}, &model.Command{}); err != nil {
 		return fmt.Errorf("自动迁移失败: %w", err)
 	}
 	return nil
