@@ -17,6 +17,195 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/alarm/records": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "告警记录列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "active | resolved，空为全部",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "条数(默认50, 最大200)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为告警数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alarm/records/{id}/resolve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "人工恢复告警",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "告警 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "已恢复",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alarm/rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "告警规则列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为规则数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "新建告警规则",
+                "parameters": [
+                    {
+                        "description": "规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.AlarmRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alarm/rules/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "更新告警规则",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "规则 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.AlarmRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "删除告警规则",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "规则 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "consumes": [
@@ -36,7 +225,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.AuthRequest"
+                            "$ref": "#/definitions/handler.AuthRequest"
                         }
                     }
                 ],
@@ -84,7 +273,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.AuthRequest"
+                            "$ref": "#/definitions/handler.AuthRequest"
                         }
                     }
                 ],
@@ -105,6 +294,90 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "用户名已存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fences": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "电子围栏列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为围栏数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "新建电子围栏",
+                "parameters": [
+                    {
+                        "description": "围栏",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.FenceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/fences/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "告警"
+                ],
+                "summary": "删除电子围栏",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "围栏 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -194,7 +467,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/backend-go_internal_simulator.Params"
+                            "$ref": "#/definitions/simulator.Params"
                         }
                     }
                 ],
@@ -253,6 +526,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/system/dead-letters": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "查询死信消息列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为死信记录数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/system/dead-letters/{id}/requeue": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "重投指定死信消息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "死信记录 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重投成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "记录不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "MQ 不可用",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/system/metrics": {
             "get": {
                 "security": [
@@ -267,6 +607,66 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "goroutines/内存/连接池/消息计数/队列深度",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "用户列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为用户数组（不含密码）",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "创建用户",
+                "parameters": [
+                    {
+                        "description": "用户信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "用户名已存在",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -305,6 +705,44 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "登记车辆",
+                "parameters": [
+                    {
+                        "description": "车辆信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.VehicleUpsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登记成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "VIN 已存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/api/v1/vehicle/telemetry": {
@@ -331,7 +769,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.TelemetryRequest"
+                            "$ref": "#/definitions/handler.TelemetryRequest"
                         }
                     }
                 ],
@@ -392,6 +830,73 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "更新车辆",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "车辆信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.VehicleUpsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "车辆"
+                ],
+                "summary": "删除车辆",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "车架号",
+                        "name": "vin",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/api/v1/vehicle/{vin}/command": {
@@ -425,7 +930,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.CommandRequest"
+                            "$ref": "#/definitions/handler.CommandRequest"
                         }
                     }
                 ],
@@ -478,7 +983,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.AckRequest"
+                            "$ref": "#/definitions/handler.AckRequest"
                         }
                     }
                 ],
@@ -643,24 +1148,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "backend-go_internal_simulator.Params": {
-            "type": "object",
-            "properties": {
-                "fault_rate": {
-                    "description": "0 ~ 0.1，每帧触发故障的概率",
-                    "type": "number"
-                },
-                "interval_ms": {
-                    "description": "100 ~ 5000",
-                    "type": "integer"
-                },
-                "vehicle_count": {
-                    "description": "1 ~ 50",
-                    "type": "integer"
-                }
-            }
-        },
-        "internal_handler.AckRequest": {
+        "handler.AckRequest": {
             "type": "object",
             "required": [
                 "status"
@@ -675,7 +1163,55 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.AuthRequest": {
+        "handler.AlarmRuleRequest": {
+            "type": "object",
+            "required": [
+                "metric",
+                "name",
+                "operator",
+                "severity"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "metric": {
+                    "type": "string",
+                    "enum": [
+                        "speed",
+                        "rpm",
+                        "battery",
+                        "fault_code"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "lt",
+                        "lte",
+                        "gt",
+                        "gte",
+                        "ne"
+                    ]
+                },
+                "severity": {
+                    "type": "string",
+                    "enum": [
+                        "info",
+                        "warning",
+                        "critical"
+                    ]
+                },
+                "threshold": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.AuthRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -693,7 +1229,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.CommandRequest": {
+        "handler.CommandRequest": {
             "type": "object",
             "required": [
                 "command"
@@ -711,7 +1247,75 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.TelemetryRequest": {
+        "handler.CreateUserRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "role",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "owner"
+                    ]
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3
+                }
+            }
+        },
+        "handler.FenceRequest": {
+            "type": "object",
+            "required": [
+                "alarm_on",
+                "name",
+                "radius_m"
+            ],
+            "properties": {
+                "alarm_on": {
+                    "type": "string",
+                    "enum": [
+                        "enter",
+                        "exit",
+                        "both"
+                    ]
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "lat": {
+                    "type": "number",
+                    "maximum": 90,
+                    "minimum": -90
+                },
+                "lng": {
+                    "type": "number",
+                    "maximum": 180,
+                    "minimum": -180
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "radius_m": {
+                    "type": "number"
+                },
+                "vin": {
+                    "description": "空 = 全部车辆",
+                    "type": "string"
+                }
+            }
+        },
+        "handler.TelemetryRequest": {
             "type": "object",
             "required": [
                 "vin"
@@ -745,6 +1349,43 @@ const docTemplate = `{
                 },
                 "vin": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.VehicleUpsertRequest": {
+            "type": "object",
+            "required": [
+                "model",
+                "owner_id",
+                "vin"
+            ],
+            "properties": {
+                "model": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "simulator.Params": {
+            "type": "object",
+            "properties": {
+                "fault_rate": {
+                    "description": "0 ~ 0.1，每帧触发故障的概率",
+                    "type": "number"
+                },
+                "interval_ms": {
+                    "description": "100 ~ 5000",
+                    "type": "integer"
+                },
+                "vehicle_count": {
+                    "description": "1 ~ 50",
+                    "type": "integer"
                 }
             }
         }

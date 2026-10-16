@@ -17,3 +17,34 @@ services:
     ports:
       - "5672:5672"   # 代码连接的通信端口
       - "15672:15672" # 浏览器可视化的管理后台端口
+
+  # ===== 可观测性（本地演示） =====
+
+  prometheus:                      # 指标采集存储，UI: http://localhost:9090
+    image: prom/prometheus:v3.13.4
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # 容器内访问宿主机的后端服务
+
+  grafana:                         # 监控大屏，UI: http://localhost:3000（admin/admin）
+    image: grafana/grafana:13.0.11
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro  # 数据源+大屏自动预置
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  jaeger:                          # 链路追踪，UI: http://localhost:16686
+    image: jaegertracing/all-in-one:1.76.0
+    ports:
+      - "16686:16686" # 查询 UI
+      - "4317:4317"   # OTLP gRPC 接收
+      - "4318:4318"   # OTLP HTTP 接收
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"

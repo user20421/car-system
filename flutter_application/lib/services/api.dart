@@ -3,7 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 后端 API 客户端：统一鉴权、401 处理
 class Api {
-  static const String baseUrl = 'http://localhost:8080';
+  /// 后端地址：默认本机；Android 模拟器用 10.0.2.2 映射宿主机：
+  /// flutter run --dart-define=API_BASE=http://10.0.2.2:8080 --dart-define=WS_BASE=ws://10.0.2.2:8080
+  static const String baseUrl =
+      String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:8080');
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 10),
@@ -38,7 +41,7 @@ class Api {
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) return '用户名或密码错误';
       if (e.response != null) return '服务器错误 (${e.response?.statusCode})';
-      return '无法连接后端 (localhost:8080)，请确认后端已启动';
+      return '无法连接后端 ($baseUrl)，请确认后端已启动';
     } catch (e) {
       return '未知错误: $e';
     }

@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'api.dart';
+
 /// WebSocket 实时通道：自动重连，广播 JSON 消息流
 class WsService {
-  static const String wsUrl = 'ws://localhost:8080/ws';
+  /// WS 完整地址：默认本机；Android 模拟器用 ws://10.0.2.2:8080/ws（dart-define 注入 WS_URL）
+  static const String wsUrl =
+      String.fromEnvironment('WS_URL', defaultValue: 'ws://localhost:8080/ws');
 
   final _controller = StreamController<Map<String, dynamic>>.broadcast();
   WebSocketChannel? _channel;
@@ -18,7 +22,11 @@ class WsService {
   void connect() {
     if (_disposed) return;
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      // WS 握手鉴权：token 走查询参数（WS 客户端无法携带 Authorization 头）
+      final uri = Uri.parse(wsUrl).replace(
+        queryParameters: {'token': Api.token ?? ''},
+      );
+      _channel = WebSocketChannel.connect(uri);
       _connected.add(true);
       _channel!.stream.listen(
         (data) {

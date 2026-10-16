@@ -49,6 +49,14 @@ VehicleController::VehicleController(hal::IVehicleData *dataSource,
         emit stateChanged();
         m_api->ackCommand(id, "executed");
     });
+
+    // 服务端告警（规则/围栏）→ 车机屏幕提醒驾驶员
+    connect(m_api, &net::ApiClient::alarmReceived,
+            this, [this](const QString &title, const QString &detail, const QString &severity) {
+        m_lastAlarm = QStringLiteral("🚨 %1：%2").arg(title, detail);
+        m_lastAlarmSeverity = severity;
+        emit stateChanged();
+    });
 }
 
 } // namespace core

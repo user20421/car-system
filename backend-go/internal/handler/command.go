@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"backend-go/internal/service"
+	"backend-go/pkg/errs"
 )
 
 // CommandRequest 控车指令请求
@@ -33,12 +34,12 @@ func SendVehicleCommand(c *gin.Context) {
 	vin := c.Param("vin")
 	var req CommandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 40001, "msg": "参数不合法: " + err.Error()})
+		errs.Fail(c, http.StatusBadRequest, errs.InvalidParams, "参数不合法")
 		return
 	}
-	cmd, err := service.SendCommand(vin, req.Command)
+	cmd, err := service.SendCommand(c.Request.Context(), vin, req.Command)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": err.Error()})
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "指令已下发", "data": cmd})
@@ -60,11 +61,11 @@ func AckVehicleCommand(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var req AckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 40001, "msg": "参数不合法: " + err.Error()})
+		errs.Fail(c, http.StatusBadRequest, errs.InvalidParams, "参数不合法")
 		return
 	}
 	if err := service.AckCommand(vin, uint(id), req.Status); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 40002, "msg": err.Error()})
+		errs.Fail(c, http.StatusBadRequest, errs.InvalidValue, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "回执已记录"})
@@ -84,7 +85,7 @@ func ListVehicleCommands(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	cmds, err := service.ListCommands(vin, limit)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": err.Error()})
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cmds, "total": len(cmds)})

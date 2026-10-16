@@ -25,7 +25,9 @@ class _HomePageState extends State<HomePage> {
   };
   List<dynamic> _commands = [];
   String? _feedback;
+  Map<String, dynamic>? _alarmBanner; // 活动告警横幅（触发显示 / 恢复消除）
   Timer? _feedbackTimer;
+  List<dynamic> _vehicles = []; // 名下全部车辆（多车切换）
 
   // 历史曲线数据（speed / battery）
   final List<FlSpot> _speedSpots = [];
@@ -60,19 +62,36 @@ class _HomePageState extends State<HomePage> {
   Future<void> _load() async {
     try {
       final vehicles = await Api.myVehicles();
-      if (vehicles.isNotEmpty && mounted) {
-        final v = vehicles.first;
-        setState(() {
-          _vin = v['vin'];
-          _locked = v['locked'] ?? true;
-          _acOn = v['ac_on'] ?? false;
-        });
-        final latest = await Api.latestTelemetry(_vin!);
-        if (latest != null && mounted) setState(() => _latest = latest);
-        await _loadHistory();
-        await _loadCommands();
+      if (!mounted) return;
+      setState(() => _vehicles = vehicles);
+      if (vehicles.isNotEmpty) {
+        // 保持当前选中车辆（仍存在），否则选中第一辆
+        final current = vehicles.firstWhere(
+          (v) => v['vin'] == _vin,
+          orElse: () => vehicles.first,
+        );
+        await _selectVehicle(current['vin'] as String);
       }
     } catch (_) {/* 后端未就绪时静默 */}
+  }
+
+  /// 切换选中车辆：重置车况/曲线/告警，重新拉取数据
+  Future<void> _selectVehicle(String vin) async {
+    final v = _vehicles.firstWhere((x) => x['vin'] == vin, orElse: () => null);
+    if (v == null || !mounted) return;
+    setState(() {
+      _vin = vin;
+      _locked = v['locked'] ?? true;
+      _acOn = v['ac_on'] ?? false;
+      _alarmBanner = null;
+      _speedSpots.clear();
+      _batterySpots.clear();
+      _xCounter = 0;
+    });
+    final latest = await Api.latestTelemetry(_vin!);
+    if (latest != null && mounted) setState(() => _latest = latest);
+    await _loadHistory();
+    await _loadCommands();
   }
 
   /// 拉取历史曲线
@@ -99,6 +118,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onMessage(Map<String, dynamic> msg) {
+    // 告警消息：结构为 {"type":"alarm","data":{...}}，需在 VIN 过滤前处理
+    if (msg['type'] == 'alarm' && msg['data'] is Map) {
+      final data = Map<String, dynamic>.from(msg['data'] as Map);
+      if (data['vin'] == _vin) setState(() => _alarmBanner = data);
+      return;
+    }
+    if (msg['type'] == 'alarm_resolved' && msg['data'] is Map) {
+      final data = Map<String, dynamic>.from(msg['data'] as Map);
+      if (data['vin'] == _vin) setState(() => _alarmBanner = null);
+      return;
+    }
     if (msg['vin'] != _vin) return;
     if (msg['type'] == 'ack') {
       _showFeedback('车机已执行「${_cmdLabels[msg['command']]}」✅');
@@ -175,6 +205,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final battery = (_latest['battery'] as num?)?.toDouble() ?? 0;
     final faultCode = (_latest['fault_code'] as String?) ?? '';
+    final alarm = _alarmBanner;
     return Scaffold(
       appBar: AppBar(
         title: const Text('🚗 我的爱车'),
@@ -204,6 +235,56 @@ class _HomePageState extends State<HomePage> {
                 ),
               )
             else ...[
+              // 多车切换（名下有多辆车时显示）
+              if (_vehicles.length > 1)
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _vehicles.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final v = _vehicles[i];
+                      final selected = v['vin'] == _vin;
+                      return ChoiceChip(
+                        label: Text(v['model'] ?? v['vin'],
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: selected ? Colors.white : Colors.grey[400])),
+                        selected: selected,
+                        selectedColor: const Color(0xFF1F6FEB),
+                        backgroundColor: const Color(0xFF161B22),
+                        onSelected: (_) => _selectVehicle(v['vin'] as String),
+                      );
+                    },
+                  ),
+                ),
+              if (_vehicles.length > 1) const SizedBox(height: 12),
+
+              // 告警横幅（规则/围栏触发，恢复自动消除）
+              if (alarm != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: alarm['severity'] == 'critical'
+                        ? Colors.red.withOpacity(0.2)
+                        : Colors.amber.withOpacity(0.15),
+                    border: Border.all(
+                        color: alarm['severity'] == 'critical'
+                            ? Colors.redAccent
+                            : Colors.amber),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('🚨 ${alarm['title']}：${alarm['detail']}',
+                      style: TextStyle(
+                          color: alarm['severity'] == 'critical'
+                              ? Colors.redAccent
+                              : Colors.amber,
+                          fontWeight: FontWeight.bold)),
+                ),
+
               // 故障告警横幅
               if (faultCode.isNotEmpty)
                 Container(

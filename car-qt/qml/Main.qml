@@ -253,6 +253,42 @@ ApplicationWindow {
         }
     }
 
+    // ===== 服务端告警提示（规则/围栏触发） =====
+    Rectangle {
+        id: alarmToast
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: cmdToast.top
+        anchors.bottomMargin: 10
+        width: alarmToastText.width + 40
+        height: 44
+        radius: 22
+        color: vehicle.lastAlarmSeverity === "critical" ? "#da3633" : "#d29922"
+        opacity: 0
+
+        property string text: ""
+        onTextChanged: {
+            if (text !== "") {
+                alarmAnim.restart()
+            }
+        }
+
+        Text {
+            id: alarmToastText
+            anchors.centerIn: parent
+            text: alarmToast.text
+            color: "white"
+            font.pixelSize: 15
+            font.bold: true
+        }
+
+        SequentialAnimation {
+            id: alarmAnim
+            NumberAnimation { target: alarmToast; property: "opacity"; to: 1; duration: 200 }
+            PauseAnimation { duration: 3500 }
+            NumberAnimation { target: alarmToast; property: "opacity"; to: 0; duration: 400 }
+        }
+    }
+
     // ===== 指令执行提示 =====
     Rectangle {
         id: cmdToast
@@ -305,12 +341,14 @@ ApplicationWindow {
         }
     }
 
-    // 指令执行 → 弹出提示
+    // 指令执行 / 告警 → 弹出提示
     Connections {
         target: vehicle
         function onStateChanged() {
             if (vehicle.lastCommand !== "")
                 cmdToast.text = vehicle.lastCommand
+            if (vehicle.lastAlarm !== "")
+                alarmToast.text = vehicle.lastAlarm
         }
     }
 }

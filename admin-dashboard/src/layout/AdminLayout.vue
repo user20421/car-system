@@ -5,6 +5,9 @@
       <nav>
         <router-link to="/dashboard" class="nav-item">📊 监控大屏</router-link>
         <router-link v-if="auth.isAdmin" to="/vehicles" class="nav-item">🚙 车辆管理</router-link>
+        <router-link v-if="auth.isAdmin" to="/users" class="nav-item">👥 用户管理</router-link>
+        <router-link v-if="auth.isAdmin" to="/alarms" class="nav-item">🚨 告警中心</router-link>
+        <router-link v-if="auth.isAdmin" to="/dead-letters" class="nav-item">☠️ 死信管理</router-link>
         <router-link v-if="auth.isAdmin" to="/simulator" class="nav-item">🎛️ 模拟器控制台</router-link>
       </nav>
       <div class="user">

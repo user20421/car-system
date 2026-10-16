@@ -13,6 +13,7 @@ import (
 	"backend-go/internal/database"
 	"backend-go/internal/model"
 	"backend-go/internal/service"
+	"backend-go/pkg/errs"
 )
 
 // TelemetryRequest 车机上报的车况数据
@@ -40,12 +41,15 @@ type TelemetryRequest struct {
 func ReportTelemetry(c *gin.Context) {
 	var req TelemetryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 40001, "msg": "参数不合法: " + err.Error()})
+		errs.Fail(c, http.StatusBadRequest, errs.InvalidParams, "参数不合法")
 		return
 	}
 
-	if err := service.Ingest(service.TelemetryInput(req)); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在，请先登记"})
+	if err := service.Ingest(service.TelemetryInput{
+		VIN: req.VIN, Speed: req.Speed, RPM: req.RPM,
+		Battery: req.Battery, Lat: req.Lat, Lng: req.Lng, FaultCode: req.FaultCode,
+	}); err != nil {
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, "车辆不存在，请先登记")
 		return
 	}
 
@@ -77,12 +81,12 @@ func GetLatestTelemetry(c *gin.Context) {
 	// 缓存未命中，回源数据库
 	var vehicle model.Vehicle
 	if err := database.DB.Where("vin = ?", vin).First(&vehicle).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在"})
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, "车辆不存在")
 		return
 	}
 	var t model.Telemetry
 	if err := database.DB.Where("vehicle_id = ?", vehicle.ID).Order("created_at DESC").First(&t).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40402, "msg": "暂无车况数据"})
+		errs.Fail(c, http.StatusNotFound, errs.NoData, "暂无车况数据")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "source": "mysql", "data": t})
@@ -100,7 +104,7 @@ func GetVehicle(c *gin.Context) {
 	vin := c.Param("vin")
 	var v model.Vehicle
 	if err := database.DB.Where("vin = ?", vin).First(&v).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在"})
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, "车辆不存在")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": v})
@@ -123,13 +127,13 @@ func GetTelemetryHistory(c *gin.Context) {
 	}
 	var vehicle model.Vehicle
 	if err := database.DB.Where("vin = ?", vin).First(&vehicle).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 40401, "msg": "车辆不存在"})
+		errs.Fail(c, http.StatusNotFound, errs.NotFound, "车辆不存在")
 		return
 	}
 	var list []model.Telemetry
 	if err := database.DB.Where("vehicle_id = ?", vehicle.ID).
 		Order("id DESC").Limit(limit).Find(&list).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 50008, "msg": "查询失败"})
+		errs.Fail(c, http.StatusInternalServerError, errs.QueryFailed, "查询失败")
 		return
 	}
 	// 反转为时间正序
@@ -150,7 +154,7 @@ func GetTelemetryHistory(c *gin.Context) {
 func ListVehicles(c *gin.Context) {
 	var vehicles []model.Vehicle
 	if err := database.DB.Preload("Owner").Find(&vehicles).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 50005, "msg": "查询失败"})
+		errs.Fail(c, http.StatusInternalServerError, errs.QueryFailed, "查询失败")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": vehicles, "total": len(vehicles)})

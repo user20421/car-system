@@ -1,12 +1,16 @@
-﻿# ============================================================
+﻿param(
+    [string]$QtRoot = "D:\software\Qt\6.11.2\llvm-mingw_64",   # Qt 安装目录（可用 -QtRoot 覆盖）
+    [string]$QtToolsRoot = "D:\software\Qt\Tools"                 # Qt Tools 目录（CMake/Ninja）
+)
+# ============================================================
 # Car-System 车联网系统 一键启动脚本
 # 启动顺序：Docker中间件 → Go后端 → Qt车机 → Vue后台 → Flutter App
 # 用法：右键"使用 PowerShell 运行"，或直接双击 启动系统.bat
 # ============================================================
 
 $root = $PSScriptRoot
-$QtBin = "D:\software\Qt\6.11.2\llvm-mingw_64\bin"
-$QtTools = "D:\software\Qt\Tools\CMake_64\bin;D:\software\Qt\Tools\Ninja;D:\software\Qt\Tools\llvm-mingw1706_64\bin;$QtBin"
+$QtBin = "$QtRoot\bin"
+$QtTools = "$QtToolsRoot\CMake_64\bin;$QtToolsRoot\Ninja;$QtToolsRoot\llvm-mingw1706_64\bin;$QtBin"
 
 function Write-Step($text) {
     Write-Host "`n========== $text ==========" -ForegroundColor Cyan

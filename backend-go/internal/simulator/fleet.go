@@ -92,7 +92,7 @@ func (f *Fleet) Start(p Params) error {
 	f.running = true
 
 	for _, st := range states {
-		go f.runVehicle(ctx, st)
+		go f.runVehicle(ctx, st, p) // 参数快照传入，避免与 Start 写 f.params 产生 data race
 	}
 
 	// 虚拟车控车指令消费者：按每辆车的 VIN 精确绑定，模拟执行后自动回执
@@ -140,9 +140,9 @@ func (f *Fleet) Status() (bool, Params) {
 	return f.running, f.params
 }
 
-// runVehicle 单辆车的数据产生循环
-func (f *Fleet) runVehicle(ctx context.Context, st *vehicleState) {
-	ticker := time.NewTicker(time.Duration(f.params.IntervalMs) * time.Millisecond)
+// runVehicle 单辆车的数据产生循环（p 为启动时的参数快照，不在循环中读 f.params）
+func (f *Fleet) runVehicle(ctx context.Context, st *vehicleState, p Params) {
+	ticker := time.NewTicker(time.Duration(p.IntervalMs) * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
@@ -150,7 +150,7 @@ func (f *Fleet) runVehicle(ctx context.Context, st *vehicleState) {
 			return
 		case <-ticker.C:
 			st.tick++
-			in := f.generate(st)
+			in := f.generate(st, p)
 			if err := service.Ingest(in); err != nil {
 				logger.L.Warn("虚拟车上报失败", zap.String("vin", st.vin), zap.Error(err))
 			}
@@ -158,8 +158,8 @@ func (f *Fleet) runVehicle(ctx context.Context, st *vehicleState) {
 	}
 }
 
-// generate 生成一帧模拟车况（与 Qt 端模拟器同策略）
-func (f *Fleet) generate(st *vehicleState) service.TelemetryInput {
+// generate 生成一帧模拟车况（与 Qt 端模拟器同策略；p 为参数快照）
+func (f *Fleet) generate(st *vehicleState, p Params) service.TelemetryInput {
 	// 车速：巡航正弦 + 噪声，周期性停车
 	phase := float64(st.tick) / 120.0 * 2 * math.Pi
 	base := 60.0 * (1.0 + math.Sin(phase))
@@ -190,7 +190,7 @@ func (f *Fleet) generate(st *vehicleState) service.TelemetryInput {
 		if st.faultCountdown == 0 {
 			st.currentFault = ""
 		}
-	} else if rand.Float64() < f.params.FaultRate {
+	} else if rand.Float64() < p.FaultRate {
 		codes := []string{"P0300", "P0420", "B1001", "U0100"}
 		st.currentFault = codes[rand.Intn(len(codes))]
 		st.faultCountdown = 5 + rand.Intn(10)

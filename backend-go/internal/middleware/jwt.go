@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+
+	"backend-go/pkg/errs"
 )
 
 // Claims 自定义 JWT 载荷
@@ -65,17 +67,17 @@ func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 40101, "msg": "缺少 Authorization 头"})
+			errs.Abort(c, http.StatusUnauthorized, errs.Unauthorized, "缺少 Authorization 头")
 			return
 		}
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 40102, "msg": "Token 格式错误，应为 Bearer <token>"})
+			errs.Abort(c, http.StatusUnauthorized, errs.BadTokenFormat, "Token 格式错误，应为 Bearer <token>")
 			return
 		}
 		claims, err := ParseToken(parts[1])
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 40103, "msg": "Token 无效或已过期"})
+			errs.Abort(c, http.StatusUnauthorized, errs.TokenInvalid, "Token 无效或已过期")
 			return
 		}
 		c.Set("claims", claims)
@@ -88,11 +90,11 @@ func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		v, exists := c.Get("claims")
 		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 40104, "msg": "未认证"})
+			errs.Abort(c, http.StatusUnauthorized, errs.NotLoggedIn, "未认证")
 			return
 		}
 		if v.(*Claims).Role != role {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 40301, "msg": "权限不足"})
+			errs.Abort(c, http.StatusForbidden, errs.Forbidden, "权限不足")
 			return
 		}
 		c.Next()

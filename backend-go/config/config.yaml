@@ -22,7 +22,13 @@ rabbitmq:
   url: amqp://car-system:car123456@127.0.0.1:5672/
   telemetry_exchange: vehicle.data      # 车况数据 topic 交换机
   telemetry_queue: telemetry.persist    # 异步落库队列
+  reconnect_max_delay_seconds: 30       # 断线重连最大退避
+  channel_pool_size: 8                  # 发布 channel 池大小
+  max_retries: 3                        # 消费失败重试次数，耗尽进死信队列
 
 jwt:
   secret: car-system-local-dev-secret-key
   expire_hours: 24
+
+telemetry:
+  jaeger_endpoint: 127.0.0.1:4317   # OTLP gRPC（Jaeger all-in-one）

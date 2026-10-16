@@ -9,6 +9,7 @@ import (
 
 	"backend-go/internal/cache"
 	"backend-go/internal/database"
+	"backend-go/internal/mq"
 )
 
 // HealthCheck 健康检查：返回各中间件连通状态
@@ -40,6 +41,11 @@ func HealthCheck(c *gin.Context) {
 	defer cancel()
 	if err := cache.RDB.Ping(ctx).Err(); err != nil {
 		comps["redis"] = "down"
+		result["status"] = "degraded"
+	}
+	// 检查 RabbitMQ（真实连接状态，重连中视为 down）
+	if mq.Client == nil || !mq.Client.IsConnected() {
+		comps["rabbitmq"] = "down"
 		result["status"] = "degraded"
 	}
 

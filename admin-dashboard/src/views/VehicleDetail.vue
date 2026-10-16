@@ -3,6 +3,7 @@
     <div class="head">
       <button class="back" @click="$router.push('/dashboard')">← 返回车队总览</button>
       <h2>车辆详情：<span class="vin">{{ vin }}</span></h2>
+      <button class="back" @click="$router.push(`/vehicle/${vin}/track`)">🛣️ 轨迹回放</button>
       <span :class="wsOnline ? 'green' : 'red'">{{ wsOnline ? '● 实时推送中' : '● 连接断开' }}</span>
     </div>
 
@@ -180,7 +181,8 @@ function pushData(t) {
 }
 
 function connect() {
-  ws = new WebSocket('ws://localhost:8080/ws')
+  const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8080'
+  ws = new WebSocket(`${wsBase}/ws?token=${encodeURIComponent(localStorage.getItem('token') || '')}`)
   ws.onopen = () => { wsOnline.value = true }
   ws.onmessage = (e) => {
     try {

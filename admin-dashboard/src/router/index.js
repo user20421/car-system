@@ -12,6 +12,10 @@ const routes = [
       { path: 'vehicle/:vin', name: 'VehicleDetail', component: () => import('../views/VehicleDetail.vue') },
       { path: 'vehicles', name: 'Vehicles', component: () => import('../views/Vehicles.vue'), meta: { admin: true } },
       { path: 'simulator', name: 'Simulator', component: () => import('../views/Simulator.vue'), meta: { admin: true } },
+      { path: 'alarms', name: 'Alarms', component: () => import('../views/Alarms.vue'), meta: { admin: true } },
+      { path: 'users', name: 'Users', component: () => import('../views/Users.vue'), meta: { admin: true } },
+      { path: 'dead-letters', name: 'DeadLetters', component: () => import('../views/DeadLetters.vue'), meta: { admin: true } },
+      { path: 'vehicle/:vin/track', name: 'Track', component: () => import('../views/Track.vue') },
     ],
   },
 ]

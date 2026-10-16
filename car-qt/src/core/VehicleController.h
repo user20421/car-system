@@ -26,6 +26,8 @@ class VehicleController : public QObject
     Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
     Q_PROPERTY(bool acOn READ acOn NOTIFY stateChanged)
     Q_PROPERTY(QString lastCommand READ lastCommand NOTIFY stateChanged)
+    Q_PROPERTY(QString lastAlarm READ lastAlarm NOTIFY stateChanged)
+    Q_PROPERTY(QString lastAlarmSeverity READ lastAlarmSeverity NOTIFY stateChanged)
     Q_PROPERTY(QString tripTime READ tripTime NOTIFY dataChanged)
     Q_PROPERTY(double tripDistance READ tripDistance NOTIFY dataChanged)
     Q_PROPERTY(double tripAvgSpeed READ tripAvgSpeed NOTIFY dataChanged)
@@ -49,6 +51,8 @@ public:
     bool locked() const { return m_locked; }
     bool acOn() const { return m_acOn; }
     QString lastCommand() const { return m_lastCommand; }
+    QString lastAlarm() const { return m_lastAlarm; }
+    QString lastAlarmSeverity() const { return m_lastAlarmSeverity; }
     QString tripTime() const;
     double tripDistance() const { return m_tripDistance; }
     double tripAvgSpeed() const { return m_tripSeconds > 0 ? m_tripDistance / (m_tripSeconds / 3600.0) : 0.0; }
@@ -66,6 +70,8 @@ private:
     bool m_locked = true;
     bool m_acOn = false;
     QString m_lastCommand;
+    QString m_lastAlarm;         // 最近一次告警提示文本（触发 Toast）
+    QString m_lastAlarmSeverity; // 告警级别：info | warning | critical
     int m_tripSeconds = 0;        // 本次行程时长（秒）
     double m_tripDistance = 0.0;  // 本次行程里程（km）
 };

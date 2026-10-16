@@ -41,8 +41,12 @@ void ApiClient::start()
 void ApiClient::connectWs()
 {
     if (m_ws.state() == QAbstractSocket::UnconnectedState) {
-        // /ws 为公开通道，连接后按 VIN 过滤自己的指令
-        m_ws.open(QUrl(QStringLiteral("ws://%1/ws").arg(m_baseUrl.mid(7)))); // http:// → ws://
+        if (m_token.isEmpty()) {
+            return; // 未登录不连，登录成功后由重连定时器触发
+        }
+        // WS 握手鉴权：token 走查询参数，连接后按 VIN 过滤自己的指令
+        m_ws.open(QUrl(QStringLiteral("ws://%1/ws?token=%2")
+                           .arg(m_baseUrl.mid(7), QString(QUrl::toPercentEncoding(m_token))))); // http:// → ws://
     }
 }
 
@@ -52,8 +56,21 @@ void ApiClient::onWsTextMessage(const QString &message)
     if (!doc.isObject())
         return;
     const auto obj = doc.object();
-    if (obj.value("type").toString() != "command")
-        return;                                    // 只处理控车指令
+    const QString type = obj.value("type").toString();
+
+    if (type == QLatin1String("alarm")) {
+        // 告警消息：{"type":"alarm","data":{vin,title,detail,severity}}
+        const auto data = obj.value("data").toObject();
+        if (data.value("vin").toString() != m_vin)
+            return; // 不是本车的告警
+        emit alarmReceived(data.value("title").toString(),
+                           data.value("detail").toString(),
+                           data.value("severity").toString());
+        return;
+    }
+
+    if (type != QLatin1String("command"))
+        return;                                    // 只处理控车指令与告警
     if (obj.value("vin").toString() != m_vin)
         return;                                    // 不是给本车的
     const uint id = static_cast<uint>(obj.value("id").toInt());

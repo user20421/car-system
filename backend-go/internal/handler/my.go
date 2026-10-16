@@ -8,6 +8,7 @@ import (
 	"backend-go/internal/database"
 	"backend-go/internal/middleware"
 	"backend-go/internal/model"
+	"backend-go/pkg/errs"
 )
 
 // MyVehicles 当前用户名下的车辆（车主视角）
@@ -21,7 +22,7 @@ func MyVehicles(c *gin.Context) {
 	claims := c.MustGet("claims").(*middleware.Claims)
 	var vehicles []model.Vehicle
 	if err := database.DB.Where("owner_id = ?", claims.UserID).Find(&vehicles).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 50007, "msg": "查询失败"})
+		errs.Fail(c, http.StatusInternalServerError, errs.QueryFailed, "查询失败")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": vehicles, "total": len(vehicles)})

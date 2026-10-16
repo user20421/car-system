@@ -40,6 +40,8 @@ signals:
     void pendingCountChanged(int count);
     // 收到控车指令（id, command）
     void commandReceived(uint id, const QString &command);
+    // 收到本车告警（标题, 详情, 级别 info/warning/critical）
+    void alarmReceived(const QString &title, const QString &detail, const QString &severity);
 
 private slots:
     void heartbeat();

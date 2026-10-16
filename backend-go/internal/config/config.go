@@ -9,11 +9,17 @@ import (
 
 // Config 应用全局配置
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	MySQL    MySQLConfig    `mapstructure:"mysql"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
+	Server    ServerConfig    `mapstructure:"server"`
+	MySQL     MySQLConfig     `mapstructure:"mysql"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	RabbitMQ  RabbitMQConfig  `mapstructure:"rabbitmq"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	Telemetry TelemetryConfig `mapstructure:"telemetry"`
+}
+
+// TelemetryConfig 链路追踪配置
+type TelemetryConfig struct {
+	JaegerEndpoint string `mapstructure:"jaeger_endpoint"` // OTLP gRPC 端点，如 127.0.0.1:4317
 }
 
 type ServerConfig struct {
@@ -51,9 +57,20 @@ type RedisConfig struct {
 }
 
 type RabbitMQConfig struct {
-	URL               string `mapstructure:"url"`
-	TelemetryExchange string `mapstructure:"telemetry_exchange"`
-	TelemetryQueue    string `mapstructure:"telemetry_queue"`
+	URL                     string `mapstructure:"url"`
+	TelemetryExchange       string `mapstructure:"telemetry_exchange"`
+	TelemetryQueue          string `mapstructure:"telemetry_queue"`
+	ReconnectMaxDelaySec    int    `mapstructure:"reconnect_max_delay_seconds"` // 断线重连最大退避（默认 30）
+	ChannelPoolSize         int    `mapstructure:"channel_pool_size"`           // 发布 channel 池大小（默认 8）
+	MaxRetries              int    `mapstructure:"max_retries"`                 // 消费失败应用层重试次数（默认 3）
+}
+
+// ReconnectMaxDelay 重连最大退避时长
+func (r RabbitMQConfig) ReconnectMaxDelay() time.Duration {
+	if r.ReconnectMaxDelaySec <= 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(r.ReconnectMaxDelaySec) * time.Second
 }
 
 type JWTConfig struct {

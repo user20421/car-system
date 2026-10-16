@@ -1,18 +1,6 @@
 basePath: /
 definitions:
-  backend-go_internal_simulator.Params:
-    properties:
-      fault_rate:
-        description: 0 ~ 0.1，每帧触发故障的概率
-        type: number
-      interval_ms:
-        description: 100 ~ 5000
-        type: integer
-      vehicle_count:
-        description: 1 ~ 50
-        type: integer
-    type: object
-  internal_handler.AckRequest:
+  handler.AckRequest:
     properties:
       status:
         enum:
@@ -22,7 +10,43 @@ definitions:
     required:
     - status
     type: object
-  internal_handler.AuthRequest:
+  handler.AlarmRuleRequest:
+    properties:
+      enabled:
+        type: boolean
+      metric:
+        enum:
+        - speed
+        - rpm
+        - battery
+        - fault_code
+        type: string
+      name:
+        maxLength: 64
+        type: string
+      operator:
+        enum:
+        - lt
+        - lte
+        - gt
+        - gte
+        - ne
+        type: string
+      severity:
+        enum:
+        - info
+        - warning
+        - critical
+        type: string
+      threshold:
+        type: number
+    required:
+    - metric
+    - name
+    - operator
+    - severity
+    type: object
+  handler.AuthRequest:
     properties:
       password:
         minLength: 6
@@ -35,7 +59,7 @@ definitions:
     - password
     - username
     type: object
-  internal_handler.CommandRequest:
+  handler.CommandRequest:
     properties:
       command:
         enum:
@@ -48,7 +72,57 @@ definitions:
     required:
     - command
     type: object
-  internal_handler.TelemetryRequest:
+  handler.CreateUserRequest:
+    properties:
+      password:
+        minLength: 6
+        type: string
+      role:
+        enum:
+        - admin
+        - owner
+        type: string
+      username:
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - password
+    - role
+    - username
+    type: object
+  handler.FenceRequest:
+    properties:
+      alarm_on:
+        enum:
+        - enter
+        - exit
+        - both
+        type: string
+      enabled:
+        type: boolean
+      lat:
+        maximum: 90
+        minimum: -90
+        type: number
+      lng:
+        maximum: 180
+        minimum: -180
+        type: number
+      name:
+        maxLength: 64
+        type: string
+      radius_m:
+        type: number
+      vin:
+        description: 空 = 全部车辆
+        type: string
+    required:
+    - alarm_on
+    - name
+    - radius_m
+    type: object
+  handler.TelemetryRequest:
     properties:
       battery:
         maximum: 100
@@ -75,6 +149,32 @@ definitions:
     required:
     - vin
     type: object
+  handler.VehicleUpsertRequest:
+    properties:
+      model:
+        maxLength: 64
+        type: string
+      owner_id:
+        type: integer
+      vin:
+        type: string
+    required:
+    - model
+    - owner_id
+    - vin
+    type: object
+  simulator.Params:
+    properties:
+      fault_rate:
+        description: 0 ~ 0.1，每帧触发故障的概率
+        type: number
+      interval_ms:
+        description: 100 ~ 5000
+        type: integer
+      vehicle_count:
+        description: 1 ~ 50
+        type: integer
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -83,6 +183,122 @@ info:
   title: Car System 车联网后端 API
   version: "1.0"
 paths:
+  /api/v1/alarm/records:
+    get:
+      parameters:
+      - description: active | resolved，空为全部
+        in: query
+        name: status
+        type: string
+      - description: 条数(默认50, 最大200)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: data 为告警数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 告警记录列表
+      tags:
+      - 告警
+  /api/v1/alarm/records/{id}/resolve:
+    post:
+      parameters:
+      - description: 告警 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: 已恢复
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 人工恢复告警
+      tags:
+      - 告警
+  /api/v1/alarm/rules:
+    get:
+      responses:
+        "200":
+          description: data 为规则数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 告警规则列表
+      tags:
+      - 告警
+    post:
+      parameters:
+      - description: 规则
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AlarmRuleRequest'
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 新建告警规则
+      tags:
+      - 告警
+  /api/v1/alarm/rules/{id}:
+    delete:
+      parameters:
+      - description: 规则 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 删除告警规则
+      tags:
+      - 告警
+    put:
+      parameters:
+      - description: 规则 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 规则
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AlarmRuleRequest'
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 更新告警规则
+      tags:
+      - 告警
   /api/v1/auth/login:
     post:
       consumes:
@@ -93,7 +309,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.AuthRequest'
+          $ref: '#/definitions/handler.AuthRequest'
       produces:
       - application/json
       responses:
@@ -125,7 +341,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.AuthRequest'
+          $ref: '#/definitions/handler.AuthRequest'
       produces:
       - application/json
       responses:
@@ -147,6 +363,57 @@ paths:
       summary: 用户注册
       tags:
       - 鉴权
+  /api/v1/fences:
+    get:
+      responses:
+        "200":
+          description: data 为围栏数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 电子围栏列表
+      tags:
+      - 告警
+    post:
+      parameters:
+      - description: 围栏
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.FenceRequest'
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 新建电子围栏
+      tags:
+      - 告警
+  /api/v1/fences/{id}:
+    delete:
+      parameters:
+      - description: 围栏 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 删除电子围栏
+      tags:
+      - 告警
   /api/v1/my/vehicles:
     get:
       produces:
@@ -192,7 +459,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/backend-go_internal_simulator.Params'
+          $ref: '#/definitions/simulator.Params'
       produces:
       - application/json
       responses:
@@ -232,6 +499,48 @@ paths:
       summary: 停止虚拟车队
       tags:
       - 模拟器
+  /api/v1/system/dead-letters:
+    get:
+      responses:
+        "200":
+          description: data 为死信记录数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 查询死信消息列表
+      tags:
+      - 系统
+  /api/v1/system/dead-letters/{id}/requeue:
+    post:
+      parameters:
+      - description: 死信记录 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: 重投成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 记录不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: MQ 不可用
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 重投指定死信消息
+      tags:
+      - 系统
   /api/v1/system/metrics:
     get:
       responses:
@@ -245,6 +554,43 @@ paths:
       summary: 后端实时性能指标
       tags:
       - 系统
+  /api/v1/users:
+    get:
+      responses:
+        "200":
+          description: data 为用户数组（不含密码）
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 用户列表
+      tags:
+      - 用户
+    post:
+      parameters:
+      - description: 用户信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateUserRequest'
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 用户名已存在
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 创建用户
+      tags:
+      - 用户
   /api/v1/vehicle:
     get:
       produces:
@@ -265,7 +611,49 @@ paths:
       summary: 车辆列表
       tags:
       - 车辆
+    post:
+      parameters:
+      - description: 车辆信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.VehicleUpsertRequest'
+      responses:
+        "200":
+          description: 登记成功
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: VIN 已存在
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 登记车辆
+      tags:
+      - 车辆
   /api/v1/vehicle/{vin}:
+    delete:
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 删除车辆
+      tags:
+      - 车辆
     get:
       parameters:
       - description: 车架号
@@ -286,6 +674,30 @@ paths:
       summary: 车辆详情
       tags:
       - 车辆
+    put:
+      parameters:
+      - description: 车架号
+        in: path
+        name: vin
+        required: true
+        type: string
+      - description: 车辆信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.VehicleUpsertRequest'
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 更新车辆
+      tags:
+      - 车辆
   /api/v1/vehicle/{vin}/command:
     post:
       consumes:
@@ -301,7 +713,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.CommandRequest'
+          $ref: '#/definitions/handler.CommandRequest'
       produces:
       - application/json
       responses:
@@ -335,7 +747,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.AckRequest'
+          $ref: '#/definitions/handler.AckRequest'
       produces:
       - application/json
       responses:
@@ -435,7 +847,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_handler.TelemetryRequest'
+          $ref: '#/definitions/handler.TelemetryRequest'
       produces:
       - application/json
       responses:

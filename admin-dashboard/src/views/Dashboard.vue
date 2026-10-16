@@ -2,6 +2,14 @@
   <div class="fleet">
     <h2>车队监控总览</h2>
 
+    <!-- 实时告警横幅 -->
+    <transition name="slide">
+      <div v-if="alarmBanner" class="alarm-banner" :class="alarmBanner.severity">
+        🚨 <b>{{ alarmBanner.title }}</b>：{{ alarmBanner.detail }}
+        <button class="close" @click="alarmBanner = null">✕</button>
+      </div>
+    </transition>
+
     <!-- 统计卡片 -->
     <div class="stats">
       <div class="stat">
@@ -59,6 +67,8 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const wsOnline = ref(false)
 const vehiclesMap = reactive({}) // vin -> 最新数据 + lastSeen
+const alarmBanner = ref(null)    // 最新一条告警横幅
+let alarmTimer = null
 
 let ws = null
 let reconnectTimer = null
@@ -88,12 +98,18 @@ function batteryClass(b) { return b > 50 ? 'green' : b > 20 ? 'yellow' : 'red' }
 function goDetail(vin) { router.push(`/vehicle/${vin}`) }
 
 function connect() {
-  ws = new WebSocket('ws://localhost:8080/ws')
+  const wsBase = import.meta.env.VITE_WS_BASE || 'ws://localhost:8080'
+  ws = new WebSocket(`${wsBase}/ws?token=${encodeURIComponent(localStorage.getItem('token') || '')}`)
   ws.onopen = () => { wsOnline.value = true }
   ws.onmessage = (e) => {
     try {
       const t = JSON.parse(e.data)
       if (t.vin) vehiclesMap[t.vin] = { ...t, lastSeen: Date.now() }
+      if (t.type === 'alarm' && t.data) {
+        alarmBanner.value = t.data
+        clearTimeout(alarmTimer)
+        alarmTimer = setTimeout(() => { alarmBanner.value = null }, 10000)
+      }
     } catch { /* 忽略 */ }
   }
   ws.onclose = () => {
@@ -110,6 +126,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearTimeout(reconnectTimer)
+  clearTimeout(alarmTimer)
   clearInterval(clockTimer)
   ws?.close()
 })
@@ -117,6 +134,20 @@ onUnmounted(() => {
 
 <style scoped>
 h2 { margin-bottom: 16px; font-size: 20px; }
+.alarm-banner {
+  display: flex; align-items: center; gap: 8px;
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+  font-size: 14px; border: 1px solid;
+}
+.alarm-banner.warning { background: #d2992222; border-color: var(--yellow); color: var(--yellow); }
+.alarm-banner.critical { background: #ff525222; border-color: var(--red); color: var(--red); }
+.alarm-banner.info { background: #1f6feb22; border-color: var(--blue); color: var(--blue); }
+.alarm-banner .close {
+  margin-left: auto; background: none; border: none; color: inherit;
+  cursor: pointer; font-size: 14px; opacity: 0.7;
+}
+.slide-enter-active, .slide-leave-active { transition: all 0.3s; }
+.slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-10px); }
 .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
 .stat {
   background: var(--panel);

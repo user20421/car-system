@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+
 	"backend-go/internal/database"
 	"backend-go/internal/model"
-	"backend-go/internal/mq"
+	"backend-go/internal/tracing"
 	"backend-go/internal/ws"
 )
 
@@ -24,8 +26,11 @@ var validCommands = map[string]bool{
 	"lock": true, "unlock": true, "ac_on": true, "ac_off": true, "honk": true,
 }
 
-// SendCommand 创建控车指令并发布到 MQ（pending 状态）
-func SendCommand(vin, cmd string) (*model.Command, error) {
+// SendCommand 创建控车指令（pending 状态）
+// 采用 Outbox 模式：指令与待投递消息在同一事务中写入，由 relay 异步投递 MQ，
+// 保证"指令落库"与"消息投递"最终一致——MQ 宕机时指令不丢，恢复后自动补投。
+// traceparent 随行持久化，relay 投递时续上链路追踪。
+func SendCommand(ctx context.Context, vin, cmd string) (*model.Command, error) {
 	if !validCommands[cmd] {
 		return nil, fmt.Errorf("不支持的指令: %s", cmd)
 	}
@@ -34,15 +39,26 @@ func SendCommand(vin, cmd string) (*model.Command, error) {
 		return nil, errors.New("车辆不存在")
 	}
 	c := model.Command{VehicleID: vehicle.ID, Command: cmd, Status: "pending"}
-	if err := database.DB.Create(&c).Error; err != nil {
+	traceparent := tracing.TraceParentFrom(ctx)
+
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&c).Error; err != nil {
+			return err
+		}
+		body, _ := json.Marshal(ControlMessage{ID: c.ID, VIN: vin, Command: cmd})
+		out := model.OutboxMessage{
+			Exchange:    "vehicle.control",
+			RoutingKey:  "vehicle.control." + vin,
+			Body:        string(body),
+			TraceParent: traceparent,
+			Status:      "pending",
+		}
+		return tx.Create(&out).Error
+	})
+	if err != nil {
 		return nil, err
 	}
-	body, _ := json.Marshal(ControlMessage{ID: c.ID, VIN: vin, Command: cmd})
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := mq.Client.PublishControl(ctx, vin, body); err != nil {
-		return nil, err
-	}
+	NotifyOutbox() // 触发 relay 立即投递（不等待下个轮询周期）
 	return &c, nil
 }
 
