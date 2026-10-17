@@ -175,7 +175,9 @@ flutter run -d chrome --web-port=5000   # http://localhost:5000
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
-| GET | `/health` | 健康检查 | - |
+| GET | `/health` | 健康检查（含各组件真实状态） | - |
+| GET | `/metrics` | Prometheus 指标端点 | - |
+| GET | `/api/v1/profile` | 当前用户信息 | JWT |
 | POST | `/api/v1/auth/register` | 注册 | - |
 | POST | `/api/v1/auth/login` | 登录 | - |
 | POST | `/api/v1/vehicle/telemetry` | 车况上报 | JWT |
@@ -205,7 +207,7 @@ flutter run -d chrome --web-port=5000   # http://localhost:5000
 
 - 所有中间件连接配置见 `backend-go/config/config.yaml`
 - 地址与凭据均已配置化：
-  - 管理后台：`admin-dashboard/.env.development`（`VITE_API_BASE` / `VITE_WS_BASE`）
+  - 管理后台：默认值即本机；需覆盖时复制 `admin-dashboard/.env.example` 为 `.env.development`（`VITE_API_BASE` / `VITE_WS_BASE`）
   - Flutter：`flutter run --dart-define=API_BASE=http://10.0.2.2:8080 --dart-define=WS_URL=ws://10.0.2.2:8080/ws`（Android 模拟器用 `10.0.2.2` 映射宿主机）
   - Qt 车机：环境变量 `CAR_API_BASE` / `CAR_VIN` / `CAR_USERNAME` / `CAR_PASSWORD`
   - 一键脚本 Qt 路径可覆盖：`powershell -File start-all.ps1 -QtRoot "D:\Qt\6.x\llvm-mingw_64"`

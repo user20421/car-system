@@ -28,6 +28,7 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic>? _alarmBanner; // 活动告警横幅（触发显示 / 恢复消除）
   Timer? _feedbackTimer;
   List<dynamic> _vehicles = []; // 名下全部车辆（多车切换）
+  int _switchSeq = 0;           // 切换序号：防止快速切换时旧请求回写新选中车辆
 
   // 历史曲线数据（speed / battery）
   final List<FlSpot> _speedSpots = [];
@@ -75,8 +76,9 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {/* 后端未就绪时静默 */}
   }
 
-  /// 切换选中车辆：重置车况/曲线/告警，重新拉取数据
+  /// 切换选中车辆：重置车况/曲线/指令/告警，重新拉取数据（带序号防竞态）
   Future<void> _selectVehicle(String vin) async {
+    final seq = ++_switchSeq;
     final v = _vehicles.firstWhere((x) => x['vin'] == vin, orElse: () => null);
     if (v == null || !mounted) return;
     setState(() {
@@ -84,13 +86,19 @@ class _HomePageState extends State<HomePage> {
       _locked = v['locked'] ?? true;
       _acOn = v['ac_on'] ?? false;
       _alarmBanner = null;
+      _commands = [];
+      _latest = {
+        'speed': 0.0, 'rpm': 0, 'battery': 0.0, 'lat': 0.0, 'lng': 0.0, 'fault_code': ''
+      };
       _speedSpots.clear();
       _batterySpots.clear();
       _xCounter = 0;
     });
     final latest = await Api.latestTelemetry(_vin!);
-    if (latest != null && mounted) setState(() => _latest = latest);
+    if (!mounted || seq != _switchSeq) return; // 期间又切换了别的车，丢弃过期数据
+    if (latest != null) setState(() => _latest = latest);
     await _loadHistory();
+    if (!mounted || seq != _switchSeq) return;
     await _loadCommands();
   }
 
@@ -326,7 +334,7 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: LinearProgressIndicator(
-                              value: battery / 100,
+                              value: (battery / 100).clamp(0.0, 1.0),
                               minHeight: 10,
                               borderRadius: BorderRadius.circular(5),
                               color: battery > 50

@@ -64,8 +64,8 @@ if (-not (Test-Path "$root\car-qt\build\car-qt.exe")) {
     $env:Path = "$QtTools;" + $env:Path
     Set-Location "$root\car-qt"
     cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-        -DCMAKE_PREFIX_PATH="D:/software/Qt/6.11.2/llvm-mingw_64" `
-        -DCMAKE_CXX_COMPILER="D:/software/Qt/Tools/llvm-mingw1706_64/bin/clang++.exe" | Out-Null
+        -DCMAKE_PREFIX_PATH="$($QtRoot -replace '\\','/')" `
+        -DCMAKE_CXX_COMPILER="$($QtToolsRoot -replace '\\','/')/llvm-mingw1706_64/bin/clang++.exe" | Out-Null
     cmake --build build | Out-Null
 }
 $env:Path = "$QtBin;" + $env:Path

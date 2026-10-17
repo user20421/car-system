@@ -63,14 +63,20 @@ func TestMain(m *testing.M) {
 
 	// 启动后台组件：WS Hub、遥测消费者、Outbox 投递器
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	go ws.GlobalHub.Run()
-	defer ws.GlobalHub.Stop()
 	go func() { _ = mq.Client.ConsumeTelemetry(ctx, service.PersistTelemetry) }()
 	go service.StartOutboxRelay(ctx)
 
 	engine = router.Setup("release")
-	os.Exit(m.Run())
+
+	// 注意：os.Exit 不执行 defer，必须显式清理
+	code := m.Run()
+	cancel()
+	ws.GlobalHub.Stop()
+	mq.Client.Close()
+	cache.Close()
+	database.Close()
+	os.Exit(code)
 }
 
 // infraAvailable 快速探测三个中间件端口
@@ -206,12 +212,14 @@ func TestTelemetryFlow(t *testing.T) {
 		t.Fatalf("最新车况不符: %v", data["speed"])
 	}
 
-	// 异步落库：MQ 消费者最终写入 MySQL
+	// 异步落库：MQ 消费者最终写入 MySQL（按增量断言，避免历史残留假阳性）
+	var before int64
+	database.DB.Model(&model.Telemetry{}).Where("speed = ? AND battery = ?", 66.6, 88.8).Count(&before)
 	waitFor(t, "遥测异步落库", 8*time.Second, func() bool {
 		var count int64
 		database.DB.Model(&model.Telemetry{}).
 			Where("speed = ? AND battery = ?", 66.6, 88.8).Count(&count)
-		return count > 0
+		return count > before
 	})
 }
 
@@ -309,18 +317,30 @@ func TestWSRequiresAuth(t *testing.T) {
 	}
 }
 
-// TestAlarmLifecycle 低电量触发告警 → 电量恢复自动解除
+// TestAlarmLifecycle 自建专用规则：触发 → 恢复（不依赖种子数据，跑完即清理）
 func TestAlarmLifecycle(t *testing.T) {
 	token := login(t, "admin", "admin123456")
 
-	// 触发：电量 10 < 阈值 20
+	// 本用例专用规则：battery < 5（种子规则阈值 20，互不干扰）
+	rule := model.AlarmRule{Name: "测试极低电量", Metric: "battery", Operator: "lt",
+		Threshold: 5, Severity: "info", Enabled: true}
+	must(database.DB.Create(&rule).Error)
+	service.SeedAlarmRules() // 无害调用
+	service.InvalidateAlarmCache()
+	defer func() {
+		database.DB.Delete(&rule)
+		database.DB.Where("rule_id = ?", rule.ID).Delete(&model.AlarmRecord{})
+		service.InvalidateAlarmCache()
+	}()
+
+	// 触发：电量 3 < 阈值 5
 	reportTelemetry(t, token, map[string]any{
-		"speed": 30, "rpm": 1500, "battery": 10, "lat": 31.2301, "lng": 121.4701,
+		"speed": 30, "rpm": 1500, "battery": 3, "lat": 31.2301, "lng": 121.4701,
 	})
 	waitFor(t, "低电量告警触发", 8*time.Second, func() bool {
 		var count int64
 		database.DB.Model(&model.AlarmRecord{}).
-			Where("vin = ? AND title = ? AND status = ?", testVIN, "电量过低", "active").Count(&count)
+			Where("rule_id = ? AND vin = ? AND status = ?", rule.ID, testVIN, "active").Count(&count)
 		return count > 0
 	})
 
@@ -331,7 +351,7 @@ func TestAlarmLifecycle(t *testing.T) {
 	waitFor(t, "低电量告警恢复", 8*time.Second, func() bool {
 		var count int64
 		database.DB.Model(&model.AlarmRecord{}).
-			Where("vin = ? AND title = ? AND status = ?", testVIN, "电量过低", "active").Count(&count)
+			Where("rule_id = ? AND vin = ? AND status = ?", rule.ID, testVIN, "active").Count(&count)
 		return count == 0
 	})
 }

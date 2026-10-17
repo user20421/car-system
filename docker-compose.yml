@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   mysql:
     image: mysql:8.0
@@ -17,6 +16,9 @@ services:
     ports:
       - "5672:5672"   # 代码连接的通信端口
       - "15672:15672" # 浏览器可视化的管理后台端口
+    environment:
+      RABBITMQ_DEFAULT_USER: car-system   # 与 backend-go/config/config.yaml 一致
+      RABBITMQ_DEFAULT_PASS: car123456    # 注意：已存在的旧数据卷不会重放该变量，需 down -v 重建
 
   # ===== 可观测性（本地演示） =====
 

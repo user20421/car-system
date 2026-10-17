@@ -45,8 +45,12 @@ void ApiClient::connectWs()
             return; // 未登录不连，登录成功后由重连定时器触发
         }
         // WS 握手鉴权：token 走查询参数，连接后按 VIN 过滤自己的指令
-        m_ws.open(QUrl(QStringLiteral("ws://%1/ws?token=%2")
-                           .arg(m_baseUrl.mid(7), QString(QUrl::toPercentEncoding(m_token))))); // http:// → ws://
+        // scheme 由 QUrl 解析替换：http→ws，https→wss
+        QUrl wsUrl(m_baseUrl);
+        wsUrl.setScheme(wsUrl.scheme() == QLatin1String("https") ? QStringLiteral("wss") : QStringLiteral("ws"));
+        wsUrl.setPath(QStringLiteral("/ws"));
+        wsUrl.setQuery(QStringLiteral("token=%1").arg(QString(QUrl::toPercentEncoding(m_token))));
+        m_ws.open(wsUrl);
     }
 }
 
@@ -138,8 +142,14 @@ void ApiClient::login()
         reply->deleteLater();
         if (reply->error() == QNetworkReply::NoError) {
             const auto doc = QJsonDocument::fromJson(reply->readAll());
-            m_token = doc.object().value("data").toObject().value("token").toString();
+            const QString newToken = doc.object().value("data").toObject().value("token").toString();
+            const bool tokenRefreshed = !newToken.isEmpty() && newToken != m_token;
+            m_token = newToken;
             setOnline(!m_token.isEmpty());
+            // token 刷新后重建 WS 连接，让握手携带新 token
+            if (tokenRefreshed && m_ws.state() == QAbstractSocket::ConnectedState) {
+                m_ws.close();
+            }
         } else {
             setOnline(false);
         }

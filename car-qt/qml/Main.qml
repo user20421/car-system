@@ -22,7 +22,7 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            text: "🚗 Car-System | VIN: LVSFACBE8MF012345"
+            text: "🚗 Car-System | VIN: " + vehicle.vin
             color: "#e6edf3"
             font.pixelSize: 17
             font.bold: true

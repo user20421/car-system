@@ -52,3 +52,24 @@ func RequeueDeadLetter(c *gin.Context) {
 	database.DB.Delete(&dl)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "已重新投递"})
 }
+
+// ListOutbox Outbox 发件箱查询（排查 pending/failed 投递）
+// @Summary Outbox 发件箱列表
+// @Tags 系统
+// @Security BearerAuth
+// @Param status query string false "pending | sent | failed，空为全部"
+// @Success 200 {object} map[string]any "data 为 Outbox 记录数组"
+// @Router /api/v1/system/outbox [get]
+func ListOutbox(c *gin.Context) {
+	q := database.DB.Order("id DESC").Limit(100)
+	switch c.Query("status") {
+	case "pending", "sent", "failed":
+		q = q.Where("status = ?", c.Query("status"))
+	}
+	var list []model.OutboxMessage
+	if err := q.Find(&list).Error; err != nil {
+		errs.Fail(c, http.StatusInternalServerError, errs.QueryFailed, "查询失败")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": list})
+}

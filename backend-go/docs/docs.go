@@ -615,6 +615,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/system/outbox": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "Outbox 发件箱列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending | sent | failed，空为全部",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 Outbox 记录数组",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "get": {
                 "security": [

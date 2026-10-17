@@ -68,10 +68,13 @@ func DispatchCommand(body []byte) error {
 	if err := json.Unmarshal(body, &msg); err != nil {
 		return err
 	}
-	// 仅当还是 pending 时更新为 sent（幂等）
-	database.DB.Model(&model.Command{}).
+	// 仅当还是 pending 时更新为 sent（幂等：重复投递不再广播）
+	res := database.DB.Model(&model.Command{}).
 		Where("id = ? AND status = ?", msg.ID, "pending").
 		Update("status", "sent")
+	if res.RowsAffected == 0 {
+		return nil // 重复消息：状态已翻转过，直接忽略
+	}
 
 	// WebSocket 推送指令（车机在线即可收到）
 	push, _ := json.Marshal(map[string]any{

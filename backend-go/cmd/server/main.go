@@ -91,9 +91,19 @@ func main() {
 	seedData()
 	service.SeedAlarmRules()
 
-	// 8. 启动遥测消费者（异步落库，断线自动恢复）
+	// 8. 死信记录钩子须在消费者启动前注入（启动窗口内耗尽重试的消息也要落表）
+	mq.OnDeadLetter = func(queue, exchange, routingKey, body, reason string) {
+		metrics.DeadLettersTotal.Inc()
+		if err := database.DB.Create(&model.DeadLetter{
+			Queue: queue, Exchange: exchange, RoutingKey: routingKey,
+			Body: body, Reason: reason,
+		}).Error; err != nil {
+			logger.L.Error("死信落表失败", zap.String("queue", queue), zap.Error(err))
+		}
+	}
+
+	// 8.1 启动遥测消费者（异步落库，断线自动恢复）
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	defer consumerCancel()
 	go func() {
 		if err := mq.Client.ConsumeTelemetry(consumerCtx, service.PersistTelemetry); err != nil {
 			logger.L.Error("遥测消费者异常退出", zap.Error(err))
@@ -106,17 +116,6 @@ func main() {
 			logger.L.Error("控车分发消费者异常退出", zap.Error(err))
 		}
 	}()
-
-	// 8.2 死信记录：消息重试耗尽后落 dead_letters 表（管理端可查/重投）
-	mq.OnDeadLetter = func(queue, exchange, routingKey, body, reason string) {
-		metrics.DeadLettersTotal.Inc()
-		if err := database.DB.Create(&model.DeadLetter{
-			Queue: queue, Exchange: exchange, RoutingKey: routingKey,
-			Body: body, Reason: reason,
-		}).Error; err != nil {
-			logger.L.Error("死信落表失败", zap.String("queue", queue), zap.Error(err))
-		}
-	}
 
 	// 8.3 启动 Outbox 投递器（控车指令 → MQ，断连恢复后自动补投）
 	go service.StartOutboxRelay(consumerCtx)
@@ -163,9 +162,6 @@ func main() {
 	database.Close()
 	logger.L.Info("服务已安全退出")
 }
-
-// persistTelemetry 已迁移至 service.PersistTelemetry（供集成测试复用）
-
 
 // seedData 初始化管理员、车主账号与示例车辆
 func seedData() {

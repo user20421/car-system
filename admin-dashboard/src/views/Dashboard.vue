@@ -128,7 +128,7 @@ onUnmounted(() => {
   clearTimeout(reconnectTimer)
   clearTimeout(alarmTimer)
   clearInterval(clockTimer)
-  ws?.close()
+  if (ws) { ws.onclose = null; ws.close() } // 防止卸载后 onclose 再触发幽灵重连
 })
 </script>
 

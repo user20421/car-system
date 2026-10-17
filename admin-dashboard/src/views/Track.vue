@@ -62,9 +62,14 @@ let marker = null
 let timer = null
 
 async function loadTrack() {
-  const res = await api.get(`/api/v1/vehicle/${vin}/telemetry/history`, { params: { limit: 300 } })
-  points.value = (res.data || []).filter((p) => p.lat && p.lng)
-  loaded.value = true
+  try {
+    const res = await api.get(`/api/v1/vehicle/${vin}/telemetry/history`, { params: { limit: 300 } })
+    points.value = (res.data || []).filter((p) => p.lat && p.lng)
+  } catch {
+    points.value = [] // 失败也进入空态提示，不再卡在加载中
+  } finally {
+    loaded.value = true
+  }
 }
 
 function initMap() {

@@ -57,6 +57,7 @@ async function create() {
     await api.post('/api/v1/users', form.value)
     msgErr.value = false
     msg.value = `用户 ${form.value.username} 创建成功`
+    setTimeout(() => { msg.value = '' }, 3000)
     form.value = { username: '', password: '', role: 'owner' }
     load()
   } catch (e) {
@@ -65,7 +66,7 @@ async function create() {
   }
 }
 
-function fmtTime(t) { return new Date(t).toLocaleString('zh-CN') }
+function fmtTime(t) { return t ? new Date(t).toLocaleString('zh-CN') : '-' }
 
 onMounted(load)
 </script>

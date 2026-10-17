@@ -40,7 +40,7 @@ func nextMessageID(vin string) string {
 	return fmt.Sprintf("%s-%d-%d", vin, time.Now().UnixNano(), atomic.AddInt64(&ingestSeq, 1))
 }
 
-// Ingest 车况数据统一入口：校验车辆 → Redis 实时缓存 → RabbitMQ 异步落库 → WebSocket 广播 → 告警评估
+// Ingest 车况数据统一入口：校验车辆 → 告警评估 → Redis 实时缓存 → RabbitMQ 异步落库 → WebSocket 广播
 func Ingest(in TelemetryInput) error {
 	// 校验车辆存在
 	var vehicle model.Vehicle

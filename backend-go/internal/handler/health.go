@@ -31,14 +31,14 @@ func HealthCheck(c *gin.Context) {
 	}
 	comps := result["components"].(gin.H)
 
-	// 检查 MySQL
-	if sqlDB, err := database.DB.DB(); err != nil || sqlDB.Ping() != nil {
+	// 检查 MySQL（带超时，防止驱动挂起拖死健康检查）
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if sqlDB, err := database.DB.DB(); err != nil || sqlDB.PingContext(ctx) != nil {
 		comps["mysql"] = "down"
 		result["status"] = "degraded"
 	}
 	// 检查 Redis
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	if err := cache.RDB.Ping(ctx).Err(); err != nil {
 		comps["redis"] = "down"
 		result["status"] = "degraded"

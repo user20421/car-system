@@ -87,6 +87,7 @@ func Setup(mode string) *gin.Engine {
 				admin.GET("/system/metrics", handler.GetSystemMetrics)
 				admin.GET("/system/dead-letters", handler.ListDeadLetters)              // 死信列表
 				admin.POST("/system/dead-letters/:id/requeue", handler.RequeueDeadLetter) // 死信人工重投
+				admin.GET("/system/outbox", handler.ListOutbox)                          // Outbox 发件箱（排查 pending/failed）
 
 				// 告警引擎：规则 CRUD + 告警记录 + 电子围栏
 				admin.GET("/alarm/rules", handler.ListAlarmRules)

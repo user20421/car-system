@@ -88,9 +88,11 @@ func Init(cfg config.RabbitMQConfig) error {
 			}
 			_ = conn.Close()
 		}
-		logger.L.Warn("RabbitMQ 初始连接失败，2s 后重试",
+		logger.L.Warn("RabbitMQ 初始连接失败，稍后重试",
 			zap.Int("attempt", i), zap.Error(err))
-		time.Sleep(2 * time.Second)
+		if i < 5 { // 最后一次不再无谓等待
+			time.Sleep(2 * time.Second)
+		}
 	}
 	if err != nil {
 		return fmt.Errorf("连接 RabbitMQ 失败: %w", err)
@@ -415,31 +417,31 @@ func (m *MQ) PublishRaw(ctx context.Context, exchange, routingKey string, body [
 
 // ConsumeTelemetry 消费遥测落库队列；连接断开后自动等待重连并恢复消费，直到 ctx 取消
 func (m *MQ) ConsumeTelemetry(ctx context.Context, handler func(body []byte) error) error {
-	return m.consumeLoop(ctx, "telemetry-consumer", func(conn *amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, error) {
+	return m.consumeLoop(ctx, "telemetry-consumer", func(conn *amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, string, error) {
 		ch, err := conn.Channel()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		// 消费者 QoS：一次最多预取 10 条，防止压垮消费者
 		if err := ch.Qos(10, 0, false); err != nil {
 			_ = ch.Close()
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		msgs, err := ch.Consume(m.queue, "telemetry-consumer", false, false, false, false, nil)
 		if err != nil {
 			_ = ch.Close()
-			return nil, nil, err
+			return nil, nil, "", err
 		}
-		return ch, msgs, nil
-	}, m.queue, handler)
+		return ch, msgs, m.queue, nil
+	}, handler)
 }
 
 // ConsumeControl 消费控车相关队列；queue 为空时创建临时排他队列并按 bindingKeys 逐个绑定
 func (m *MQ) ConsumeControl(ctx context.Context, queue string, bindingKeys []string, consumerTag string, handler func(body []byte) error) error {
-	return m.consumeLoop(ctx, consumerTag, func(conn *amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, error) {
+	return m.consumeLoop(ctx, consumerTag, func(conn *amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, string, error) {
 		ch, err := conn.Channel()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		q := queue
 		if q == "" {
@@ -447,36 +449,36 @@ func (m *MQ) ConsumeControl(ctx context.Context, queue string, bindingKeys []str
 			tmp, err := ch.QueueDeclare("", false, true, true, false, nil)
 			if err != nil {
 				_ = ch.Close()
-				return nil, nil, err
+				return nil, nil, "", err
 			}
 			q = tmp.Name
 			for _, key := range bindingKeys {
 				if err := ch.QueueBind(q, key, controlExchange, false, nil); err != nil {
 					_ = ch.Close()
-					return nil, nil, err
+					return nil, nil, "", err
 				}
 			}
 		}
 		msgs, err := ch.Consume(q, consumerTag, false, false, false, false, nil)
 		if err != nil {
 			_ = ch.Close()
-			return nil, nil, err
+			return nil, nil, "", err
 		}
-		return ch, msgs, nil
-	}, queue, handler)
+		return ch, msgs, q, nil
+	}, handler)
 }
 
 // consumeLoop 消费者主循环：等待连接 → 建立消费 → 通道关闭后等待重连自动恢复
 func (m *MQ) consumeLoop(ctx context.Context, name string,
-	setup func(*amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, error),
-	queueName string, handler func(body []byte) error) error {
+	setup func(*amqp.Connection) (*amqp.Channel, <-chan amqp.Delivery, string, error),
+	handler func(body []byte) error) error {
 
 	for {
 		conn := m.waitConnected(ctx)
 		if conn == nil {
 			return nil // 关闭中或 ctx 取消
 		}
-		ch, msgs, err := setup(conn)
+		ch, msgs, queueName, err := setup(conn)
 		if err != nil {
 			logger.L.Warn("消费者建立失败，等待重试", zap.String("consumer", name), zap.Error(err))
 			if !sleepOrStopCtx(ctx, 2*time.Second, m.stopCh) {

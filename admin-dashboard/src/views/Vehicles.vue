@@ -114,9 +114,13 @@ async function remove(v) {
   if (!confirm(`确认删除车辆 ${v.vin}？`)) return
   try {
     await api.delete(`/api/v1/vehicle/${v.vin}`)
+    if (editing.value === v.vin) cancelEdit() // 删除正在编辑的车辆时退出编辑态
+    formErr.value = false
+    formMsg.value = `已删除 ${v.vin}`
     load()
   } catch (e) {
-    alert(e?.msg || '删除失败')
+    formErr.value = true
+    formMsg.value = e?.msg || '删除失败'
   }
 }
 function showMsg(m) { formErr.value = false; formMsg.value = m }

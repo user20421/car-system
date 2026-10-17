@@ -27,7 +27,10 @@ class WsService {
         queryParameters: {'token': Api.token ?? ''},
       );
       _channel = WebSocketChannel.connect(uri);
-      _connected.add(true);
+      // ready 完成（握手成功）后才标记已连接，失败走重连
+      _channel!.ready.then((_) {
+        if (!_disposed) _connected.add(true);
+      }).catchError((_) => _scheduleReconnect());
       _channel!.stream.listen(
         (data) {
           try {

@@ -38,7 +38,7 @@ const (
 	DeadLetterNotFound = 40404 // 死信记录不存在
 
 	// ---- 409xx 冲突 ----
-	Conflict = 40901 // 资源冲突（用户名已存在）
+	Conflict = 40901 // 资源冲突（用户名/VIN 已存在）
 
 	// ---- 500xx 服务端错误 ----
 	Internal        = 50001 // 通用服务端错误

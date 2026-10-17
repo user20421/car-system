@@ -225,8 +225,8 @@ onMounted(() => {
 function resizeAll() { speedChart?.resize(); rpmChart?.resize(); batteryChart?.resize() }
 
 onUnmounted(() => {
-  clearTimeout(reconnectTimer); clearTimeout(faultTimer)
-  ws?.close()
+  clearTimeout(reconnectTimer); clearTimeout(faultTimer); clearTimeout(feedbackTimer)
+  if (ws) { ws.onclose = null; ws.close() } // 防止卸载后 onclose 再触发幽灵重连
   window.removeEventListener('resize', resizeAll)
   speedChart?.dispose(); rpmChart?.dispose(); batteryChart?.dispose()
 })

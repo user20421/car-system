@@ -29,6 +29,7 @@ public:
 
     bool online() const { return m_online; }
     int  pendingCount() const { return m_pending.size(); }
+    QString vin() const { return m_vin; }
 
     void reportTelemetry(const hal::TelemetryFrame &frame);
     void ackCommand(uint id, const QString &status);

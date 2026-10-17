@@ -26,7 +26,7 @@
     <!-- 告警规则 -->
     <section class="panel">
       <h3>📏 告警规则</h3>
-      <table>
+      <table v-if="rules.length">
         <thead>
           <tr><th>名称</th><th>条件</th><th>级别</th><th>状态</th><th>操作</th></tr>
         </thead>
@@ -44,6 +44,7 @@
           </tr>
         </tbody>
       </table>
+      <div v-else class="empty">暂无规则，可在下方新建</div>
 
       <!-- 新建规则 -->
       <form class="create-form" @submit.prevent="createRule">
@@ -81,7 +82,7 @@
         <tbody>
           <tr v-for="f in fences" :key="f.id">
             <td>{{ f.name }}</td>
-            <td class="mono">{{ f.lat.toFixed(4) }}, {{ f.lng.toFixed(4) }}</td>
+            <td class="mono">{{ Number(f.lat).toFixed(4) }}, {{ Number(f.lng).toFixed(4) }}</td>
             <td>{{ f.radius_m }} m</td>
             <td>{{ fenceOnText(f.alarm_on) }}</td>
             <td class="mono">{{ f.vin || '全部车辆' }}</td>
@@ -125,6 +126,10 @@
       </table>
       <div v-else class="empty">暂无历史告警</div>
     </section>
+    <!-- 操作反馈 toast -->
+    <transition name="slide">
+      <div v-if="toast" class="toast" :class="{ err: toastErr }">{{ toast }}</div>
+    </transition>
   </div>
 </template>
 
@@ -141,6 +146,27 @@ const newRule = ref({ name: '', metric: 'battery', operator: 'lt', threshold: 20
 const newFence = ref({ name: '', lat: 31.23, lng: 121.47, radius_m: 500, alarm_on: 'both', vin: '' })
 
 let timer = null
+let toastTimer = null
+const toast = ref('')
+const toastErr = ref(false)
+
+function showToast(m, isErr = false) {
+  toast.value = m
+  toastErr.value = isErr
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = '' }, 3000)
+}
+
+// act 统一包裹操作：失败弹 toast，成功自动刷新
+async function act(fn, okMsg) {
+  try {
+    await fn()
+    if (okMsg) showToast(okMsg)
+    loadAll()
+  } catch (e) {
+    showToast(e?.msg || '操作失败', true)
+  }
+}
 
 async function loadAll() {
   try {
@@ -158,34 +184,28 @@ async function loadAll() {
 }
 
 async function toggleRule(r) {
-  await api.put(`/api/v1/alarm/rules/${r.id}`, { ...r, enabled: !r.enabled })
-  loadAll()
+  await act(() => api.put(`/api/v1/alarm/rules/${r.id}`, { ...r, enabled: !r.enabled }))
 }
 async function removeRule(id) {
-  await api.delete(`/api/v1/alarm/rules/${id}`)
-  loadAll()
+  await act(() => api.delete(`/api/v1/alarm/rules/${id}`), '规则已删除')
 }
 async function createRule() {
   if (newRule.value.metric === 'fault_code') {
     newRule.value.operator = 'ne'
     newRule.value.threshold = 0
   }
-  await api.post('/api/v1/alarm/rules', newRule.value)
+  await act(() => api.post('/api/v1/alarm/rules', newRule.value), '规则已创建')
   newRule.value.name = ''
-  loadAll()
 }
 async function createFence() {
-  await api.post('/api/v1/fences', newFence.value)
+  await act(() => api.post('/api/v1/fences', newFence.value), '围栏已创建')
   newFence.value.name = ''
-  loadAll()
 }
 async function removeFence(id) {
-  await api.delete(`/api/v1/fences/${id}`)
-  loadAll()
+  await act(() => api.delete(`/api/v1/fences/${id}`), '围栏已删除')
 }
 async function resolve(id) {
-  await api.post(`/api/v1/alarm/records/${id}/resolve`)
-  loadAll()
+  await act(() => api.post(`/api/v1/alarm/records/${id}/resolve`), '已恢复')
 }
 
 function fmtTime(t) { return t ? new Date(t).toLocaleTimeString() : '-' }
@@ -198,7 +218,7 @@ onMounted(() => {
   loadAll()
   timer = setInterval(loadAll, 5000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => { clearInterval(timer); clearTimeout(toastTimer) })
 </script>
 
 <style scoped>
@@ -240,4 +260,11 @@ th { color: var(--text-dim); font-weight: normal; }
   color: var(--text); padding: 6px 10px; font-size: 13px;
 }
 .create-form input { width: 130px; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff;
+  padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 10;
+}
+.toast.err { background: #da3633; }
+.slide-enter-active, .slide-leave-active { transition: all 0.3s; }
+.slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(10px); }
 </style>

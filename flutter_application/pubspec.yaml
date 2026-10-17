@@ -1,5 +1,5 @@
 name: flutter_application
-description: "A new Flutter project."
+description: "Car-System 车联网平台车主端 App（车况查看 / 远程控车 / 实时告警）"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

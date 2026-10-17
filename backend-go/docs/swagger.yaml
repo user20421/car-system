@@ -554,6 +554,24 @@ paths:
       summary: 后端实时性能指标
       tags:
       - 系统
+  /api/v1/system/outbox:
+    get:
+      parameters:
+      - description: pending | sent | failed，空为全部
+        in: query
+        name: status
+        type: string
+      responses:
+        "200":
+          description: data 为 Outbox 记录数组
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Outbox 发件箱列表
+      tags:
+      - 系统
   /api/v1/users:
     get:
       responses:

@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 后端 API 客户端：统一鉴权、401 处理
+/// 后端 API 客户端：统一鉴权头注入
 class Api {
   /// 后端地址：默认本机；Android 模拟器用 10.0.2.2 映射宿主机：
-  /// flutter run --dart-define=API_BASE=http://10.0.2.2:8080 --dart-define=WS_BASE=ws://10.0.2.2:8080
+  /// flutter run --dart-define=API_BASE=http://10.0.2.2:8080 --dart-define=WS_URL=ws://10.0.2.2:8080/ws
   static const String baseUrl =
       String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:8080');
   static final Dio _dio = Dio(BaseOptions(

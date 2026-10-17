@@ -28,6 +28,7 @@ class VehicleController : public QObject
     Q_PROPERTY(QString lastCommand READ lastCommand NOTIFY stateChanged)
     Q_PROPERTY(QString lastAlarm READ lastAlarm NOTIFY stateChanged)
     Q_PROPERTY(QString lastAlarmSeverity READ lastAlarmSeverity NOTIFY stateChanged)
+    Q_PROPERTY(QString vin READ vin CONSTANT)
     Q_PROPERTY(QString tripTime READ tripTime NOTIFY dataChanged)
     Q_PROPERTY(double tripDistance READ tripDistance NOTIFY dataChanged)
     Q_PROPERTY(double tripAvgSpeed READ tripAvgSpeed NOTIFY dataChanged)
@@ -53,6 +54,7 @@ public:
     QString lastCommand() const { return m_lastCommand; }
     QString lastAlarm() const { return m_lastAlarm; }
     QString lastAlarmSeverity() const { return m_lastAlarmSeverity; }
+    QString vin() const { return m_api->vin(); }
     QString tripTime() const;
     double tripDistance() const { return m_tripDistance; }
     double tripAvgSpeed() const { return m_tripSeconds > 0 ? m_tripDistance / (m_tripSeconds / 3600.0) : 0.0; }

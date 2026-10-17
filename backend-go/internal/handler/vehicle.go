@@ -70,9 +70,9 @@ func GetLatestTelemetry(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// 优先读缓存
+	// 优先读缓存（返回形状与回源一致：service.TelemetryInput）
 	if data, err := cache.RDB.Get(ctx, "vehicle:latest:"+vin).Result(); err == nil {
-		var t TelemetryRequest
+		var t service.TelemetryInput
 		_ = json.Unmarshal([]byte(data), &t)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "source": "redis", "data": t})
 		return
@@ -89,7 +89,10 @@ func GetLatestTelemetry(c *gin.Context) {
 		errs.Fail(c, http.StatusNotFound, errs.NoData, "暂无车况数据")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "source": "mysql", "data": t})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "source": "mysql", "data": service.TelemetryInput{
+		VIN: vin, MessageID: t.MessageID, Speed: t.Speed, RPM: t.RPM,
+		Battery: t.Battery, Lat: t.Lat, Lng: t.Lng, FaultCode: t.FaultCode,
+	}})
 }
 
 // GetVehicle 查询单个车辆信息
@@ -156,6 +159,17 @@ func ListVehicles(c *gin.Context) {
 	if err := database.DB.Preload("Owner").Find(&vehicles).Error; err != nil {
 		errs.Fail(c, http.StatusInternalServerError, errs.QueryFailed, "查询失败")
 		return
+	}
+	// 在线状态实时计算：Redis 中有最新车况缓存（5min TTL）即视为在线，
+	// 避免 DB 中 status 字段名存实亡（无人更新）的问题
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for i := range vehicles {
+		if cache.RDB.Exists(ctx, "vehicle:latest:"+vehicles[i].VIN).Val() > 0 {
+			vehicles[i].Status = "online"
+		} else {
+			vehicles[i].Status = "offline"
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": vehicles, "total": len(vehicles)})
 }
