@@ -1,0 +1,51 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Activity, ArrowUpRight, CarFront, ChevronRight, ListFilter, LocateFixed, MapPin, RefreshCw, Search, SlidersHorizontal } from 'lucide-vue-next'
+import PageHeader from '../components/common/PageHeader.vue'
+import StatePanel from '../components/common/StatePanel.vue'
+import StatusBadge from '../components/common/StatusBadge.vue'
+import VectorMap from '../components/map/VectorMap.vue'
+import VehicleArt from '../components/vehicle/VehicleArt.vue'
+import { useFleetStore } from '../stores/fleet'
+import { useOnline } from '../composables/useOnline'
+import { relativeTime } from '../utils/format'
+const fleet = useFleetStore(), router = useRouter()
+const { online } = useOnline()
+const search = ref(''), status = ref('all'), sort = ref('status')
+const filtered = computed(() => {
+  const list = fleet.vehicles.filter(v => {
+    const matches = `${v.display_name} ${v.vin} ${v.model}`.toLowerCase().includes(search.value.toLowerCase())
+    const currentStatus = fleet.isOnline(v.vin) ? (fleet.telemetry[v.vin]?.speed_kph || 0) > 1 ? 'moving' : 'online' : 'offline'
+    return matches && (status.value === 'all' || currentStatus === status.value)
+  })
+  return [...list].sort((a,b) => sort.value === 'battery' ? (fleet.telemetry[b.vin]?.battery_percent || 0) - (fleet.telemetry[a.vin]?.battery_percent || 0) : Number(fleet.isOnline(b.vin)) - Number(fleet.isOnline(a.vin)))
+})
+const selected = computed(() => fleet.vehicles.find(v => v.vin === fleet.selectedVin))
+const selectedTelemetry = computed(() => fleet.telemetry[fleet.selectedVin])
+function select(vin: string) { fleet.selectedVin = vin }
+async function refresh() { await fleet.load(true) }
+</script>
+<template>
+  <div class="page fleet-page">
+    <PageHeader eyebrow="LIVE FLEET" title="实时车队" subtitle="车辆位置与遥测通过 WSS 按授权 VIN 推送；断线时自动恢复 HTTPS 快照。"><template #actions><span class="live-chip"><i/>{{ fleet.realtimeState==='live'?'实时数据流':'正在恢复连接' }}</span><button class="btn btn-secondary" :disabled="fleet.loading" @click="refresh"><RefreshCw/>刷新快照</button></template></PageHeader>
+    <StatePanel :loading="fleet.loading&&!fleet.loaded" :error="fleet.error" :offline="!online&&!fleet.loaded" @retry="refresh">
+      <div class="fleet-workspace">
+        <section class="card map-panel"><div class="map-panel-head"><div class="filter-tabs"><button v-for="tab in [{k:'all',l:'全部'},{k:'moving',l:'行驶中'},{k:'online',l:'在线'},{k:'offline',l:'离线'}]" :key="tab.k" :class="{active:status===tab.k}" @click="status=tab.k">{{ tab.l }}<span v-if="tab.k==='all'">{{ fleet.vehicles.length }}</span></button></div><span class="map-coordinates"><MapPin/>上海运营区域</span></div><VectorMap :vehicles="filtered" :telemetry="fleet.telemetry" :selected-vin="fleet.selectedVin" :height="590" @select="select"/><div class="map-legend"><span><i class="moving"/>行驶中</span><span><i class="online"/>在线静止</span><span><i class="offline"/>离线</span><span class="map-scale">500 m</span></div></section>
+        <aside class="fleet-sidebar">
+          <div class="fleet-filter"><div class="search-field"><Search/><input v-model="search" class="input" placeholder="搜索名称或 VIN"></div><button class="btn btn-secondary btn-icon" title="排序" @click="sort=sort==='status'?'battery':'status'"><ListFilter/></button></div>
+          <div class="list-caption"><span>{{ filtered.length }} 辆车辆</span><span>{{ sort==='status'?'按连接状态':'按剩余电量' }}<SlidersHorizontal/></span></div>
+          <div class="vehicle-list"><TransitionGroup name="list"><button v-for="vehicle in filtered" :key="vehicle.vin" class="vehicle-list-item" :class="{selected:fleet.selectedVin===vehicle.vin}" @click="select(vehicle.vin)"><span class="list-car-icon" :class="{online:fleet.isOnline(vehicle.vin)}"><CarFront/></span><span class="list-vehicle-main"><span><strong>{{ vehicle.display_name }}</strong><StatusBadge :status="fleet.isOnline(vehicle.vin)?((fleet.telemetry[vehicle.vin]?.speed_kph||0)>1?'sent':'online'):'offline'" :label="fleet.isOnline(vehicle.vin)?((fleet.telemetry[vehicle.vin]?.speed_kph||0)>1?'行驶中':'在线'):'离线'"/></span><small>{{ vehicle.model }} · {{ vehicle.license_plate || vehicle.vin.slice(-6) }}</small><span class="list-data"><b>{{ Math.round(fleet.telemetry[vehicle.vin]?.speed_kph||0) }} <em>km/h</em></b><i/><b>{{ fleet.telemetry[vehicle.vin]?.battery_percent.toFixed(0)||'—' }}<em>% SOC</em></b><time>{{ relativeTime(fleet.telemetry[vehicle.vin]?.occurred_at_ms) }}</time></span></span></button></TransitionGroup></div>
+          <StatePanel :empty="!filtered.length" compact title="没有匹配的车辆" description="请尝试清除搜索词或切换状态筛选。"><span/></StatePanel>
+          <Transition name="fade"><div v-if="selected && selectedTelemetry" class="selected-vehicle card"><div class="selected-car-bg"><VehicleArt :compact="true" :color="selected.color"/></div><div class="selected-head"><div><strong>{{ selected.display_name }}</strong><span class="mono">{{ selected.vin }}</span></div><button class="btn btn-ghost btn-icon btn-sm" @click="router.push(`/vehicles/${selected.vin}`)"><ArrowUpRight/></button></div><div class="selected-stats"><div><Activity/><span>当前车速</span><strong>{{ selectedTelemetry.speed_kph.toFixed(0) }} <small>km/h</small></strong></div><div><LocateFixed/><span>定位精度</span><strong>±{{ selectedTelemetry.location?.horizontal_accuracy_m||'—' }} <small>m</small></strong></div></div><button class="btn btn-primary selected-detail" @click="router.push(`/vehicles/${selected.vin}`)">查看车辆详情<ChevronRight/></button></div></Transition>
+        </aside>
+      </div>
+    </StatePanel>
+  </div>
+</template>
+<style scoped>
+.live-chip{display:flex;align-items:center;gap:6px;color:var(--green);font-size:10px}.live-chip i{width:6px;height:6px;background:var(--green);border-radius:50%;box-shadow:0 0 0 4px var(--green-soft);animation:pulse 2s infinite}.fleet-workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}.map-panel{overflow:hidden;position:relative}.map-panel-head{height:58px;padding:0 17px;display:flex;align-items:center;justify-content:space-between}.filter-tabs{display:flex;gap:4px}.filter-tabs button{border:0;background:transparent;color:var(--muted);font-size:10px;padding:7px 11px;border-radius:7px;cursor:pointer}.filter-tabs button.active{background:var(--primary-soft);color:var(--primary);font-weight:650}.filter-tabs button span{margin-left:5px;font-size:8px}.map-coordinates{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted)}.map-coordinates svg{width:12px}.map-legend{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:15px;align-items:center;background:color-mix(in srgb,var(--surface-solid) 90%,transparent);backdrop-filter:blur(8px);padding:8px 12px;border-radius:8px;box-shadow:var(--shadow-sm);font-size:8px;color:var(--muted);white-space:nowrap}.map-legend span{display:flex;align-items:center;gap:5px}.map-legend i{width:6px;height:6px;border-radius:50%;background:var(--green)}.map-legend i.moving{background:var(--primary)}.map-legend i.offline{background:#9299a6}.map-scale{border-left:1px solid var(--line);padding-left:12px}.fleet-sidebar{min-width:0}.fleet-filter{display:flex;gap:8px}.fleet-filter .search-field{min-width:0;flex:1}.fleet-filter .input{background:var(--surface)}.list-caption{display:flex;justify-content:space-between;align-items:center;margin:14px 3px 9px;font-size:9px;color:var(--muted)}.list-caption span:last-child{display:flex;gap:5px;align-items:center}.list-caption svg{width:11px}.vehicle-list{display:flex;flex-direction:column;gap:8px;max-height:350px;overflow:auto;padding:1px}.vehicle-list-item{display:flex;align-items:flex-start;gap:11px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer;text-align:left;transition:all .18s;width:100%}.vehicle-list-item:hover{border-color:var(--line-strong);box-shadow:var(--shadow-sm)}.vehicle-list-item.selected{border-color:color-mix(in srgb,var(--primary) 55%,var(--line));box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 7%,transparent)}.list-car-icon{width:34px;height:34px;border-radius:9px;background:var(--surface-2);color:var(--muted);display:grid;place-items:center;flex:none}.list-car-icon.online{background:var(--primary-soft);color:var(--primary)}.list-car-icon svg{width:16px}.list-vehicle-main{flex:1;min-width:0}.list-vehicle-main>span:first-child{display:flex;align-items:center;justify-content:space-between;gap:6px}.list-vehicle-main strong{font-size:11px}.list-vehicle-main>small{display:block;font-size:8px;color:var(--muted);margin-top:4px}.list-data{display:flex;align-items:center;gap:8px;margin-top:9px}.list-data b{font-size:10px;font-weight:650}.list-data b em{font-size:7px;font-style:normal;color:var(--muted);font-weight:500}.list-data i{width:1px;height:9px;background:var(--line)}.list-data time{margin-left:auto;font-size:7px;color:var(--muted)}.selected-vehicle{margin-top:13px;padding:14px;position:relative;overflow:hidden}.selected-car-bg{height:90px;margin:-8px -5px 0;opacity:.95}.selected-car-bg :deep(svg){height:115px}.selected-head{display:flex;justify-content:space-between;align-items:center}.selected-head>div{display:flex;flex-direction:column;gap:4px}.selected-head strong{font-size:12px}.selected-head span{font-size:8px;color:var(--muted)}.selected-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px}.selected-stats>div{display:grid;grid-template-columns:17px 1fr;column-gap:6px}.selected-stats svg{width:13px;color:var(--muted);grid-row:span 2}.selected-stats span{font-size:8px;color:var(--muted)}.selected-stats strong{font-size:13px;margin-top:3px}.selected-stats small{font-size:8px;color:var(--muted)}.selected-detail{width:100%;margin-top:14px;min-height:34px;font-size:10px}
+@media(max-width:1200px){.fleet-workspace{grid-template-columns:minmax(0,1fr) 300px}.vehicle-list{max-height:330px}}
+@media(max-width:1000px){.fleet-workspace{grid-template-columns:1fr}.fleet-sidebar{display:grid;grid-template-columns:1fr 1fr;gap:12px}.fleet-filter,.list-caption{grid-column:1/-1}.vehicle-list{max-height:420px}.selected-vehicle{margin-top:0}}
+@media(max-width:650px){.fleet-sidebar{display:block}.selected-vehicle{margin-top:12px}.map-coordinates{display:none}}
+</style>

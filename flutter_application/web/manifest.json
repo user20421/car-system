@@ -1,11 +1,11 @@
 {
-    "name": "flutter_application",
-    "short_name": "flutter_application",
+    "name": "AURORA 车主",
+    "short_name": "AURORA",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "AURORA 官方智能车主应用",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

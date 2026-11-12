@@ -1,0 +1,6 @@
+.env
+.secrets/
+.bin/
+car-server.exe
+car-server.exe~
+coverage.out

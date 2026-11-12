@@ -1,0 +1,7 @@
+<script setup lang="ts">
+import { ArrowLeft, Home, LockKeyhole, ShieldX } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+const router=useRouter()
+</script>
+<template><div class="error-page"><div class="error-orbit"><ShieldX/><i/><i/></div><div class="eyebrow">ACCESS CONTROL · 403</div><h1>此区域需要更高权限</h1><p>您的账号已通过身份验证，但当前角色无权访问此资源。<br>权限由服务端强制执行，如需访问请联系企业管理员。</p><div><button class="btn btn-secondary" @click="router.back()"><ArrowLeft/>返回上一页</button><button class="btn btn-primary" @click="router.push('/overview')"><Home/>回到车队总览</button></div><span class="error-code"><LockKeyhole/>AURORA POLICY ENFORCEMENT</span></div></template>
+<style scoped>.error-page{min-height:calc(100vh - 140px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}.error-orbit{width:100px;height:100px;border-radius:32px;background:var(--red-soft);color:var(--red);display:grid;place-items:center;position:relative;margin-bottom:28px}.error-orbit>svg{width:43px;height:43px}.error-orbit i{position:absolute;inset:-13px;border:1px solid var(--line);border-radius:40px}.error-orbit i:last-child{inset:-27px;border-radius:50px;opacity:.5}.error-page h1{font-size:28px}.error-page p{font-size:12px;line-height:1.9;color:var(--muted);margin-top:14px}.error-page>div:nth-of-type(3){display:flex;gap:10px;margin-top:25px}.error-code{display:flex;align-items:center;gap:6px;font-size:8px;letter-spacing:.12em;color:var(--muted);margin-top:38px}.error-code svg{width:12px}</style>

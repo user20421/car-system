@@ -1,52 +1,109 @@
 services:
   mysql:
     image: mysql:8.0
-    ports:
-      - "3306:3306"
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-car_system}
+      MYSQL_USER: ${MYSQL_USER:-car_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      TZ: Asia/Shanghai
+    command:
+      - mysqld
+      - --require-secure-transport=ON
+      - --ssl-ca=/etc/mysql/tls/ca.crt
+      - --ssl-cert=/etc/mysql/tls/mysql-server.crt
+      - --ssl-key=/etc/mysql/tls/mysql-server.key
+      - --tls-version=TLSv1.2,TLSv1.3
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - car_refactor_mysql_data:/var/lib/mysql
+      - ./deploy/certs/ca.crt:/etc/mysql/tls/ca.crt:ro
+      - ./deploy/certs/mysql-server.crt:/etc/mysql/tls/mysql-server.crt:ro
+      - ./deploy/certs/mysql-server.key:/etc/mysql/tls/mysql-server.key:ro
+    networks: [car_net]
+    healthcheck:
+      test: ["CMD-SHELL", "mysql --protocol=socket --ssl-mode=DISABLED -uroot -p\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    logging: &default_logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7.0
+    restart: unless-stopped
+    environment:
+      REDIS_USER: ${REDIS_USER:-car_app}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      TZ: Asia/Shanghai
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf 'user default off\nuser %s on >%s ~car:* &car:* +@all\n' "$${REDIS_USER}" "$${REDIS_PASSWORD}" > /tmp/users.acl
+        exec redis-server /usr/local/etc/redis/redis.conf --aclfile /tmp/users.acl
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - car_refactor_redis_data:/data
+      - ./deploy/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./deploy/certs/ca.crt:/etc/redis/tls/ca.crt:ro
+      - ./deploy/certs/redis-server.crt:/etc/redis/tls/redis-server.crt:ro
+      - ./deploy/certs/redis-server.key:/etc/redis/tls/redis-server.key:ro
+    networks: [car_net]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --tls --cacert /etc/redis/tls/ca.crt --user \"$$REDIS_USER\" --pass \"$$REDIS_PASSWORD\" --no-auth-warning PING | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    logging: *default_logging
 
   rabbitmq:
     image: rabbitmq:3-management
-    ports:
-      - "5672:5672"   # 代码连接的通信端口
-      - "15672:15672" # 浏览器可视化的管理后台端口
+    restart: unless-stopped
+    hostname: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: car-system   # 与 backend-go/config/config.yaml 一致
-      RABBITMQ_DEFAULT_PASS: car123456    # 注意：已存在的旧数据卷不会重放该变量，需 down -v 重建
-
-  # ===== 可观测性（本地演示） =====
-
-  prometheus:                      # 指标采集存储，UI: http://localhost:9090
-    image: prom/prometheus:v3.13.4
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-car_app}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
+      RABBITMQ_DEFAULT_VHOST: car
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?RABBITMQ_ERLANG_COOKIE is required}
+      TZ: Asia/Shanghai
     ports:
-      - "9090:9090"
+      - "127.0.0.1:${AMQPS_HOST_PORT:-5671}:5671"
+      - "127.0.0.1:${RABBITMQ_HTTPS_HOST_PORT:-15671}:15671"
     volumes:
-      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway" # 容器内访问宿主机的后端服务
+      - car_refactor_rabbitmq_data:/var/lib/rabbitmq
+      - ./deploy/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./deploy/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./deploy/certs/ca.crt:/etc/rabbitmq/tls/ca.crt:ro
+      - ./deploy/certs/rabbitmq-server.crt:/etc/rabbitmq/tls/rabbitmq-server.crt:ro
+      - ./deploy/certs/rabbitmq-server.key:/etc/rabbitmq/tls/rabbitmq-server.key:ro
+    networks: [car_net]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    logging: *default_logging
 
-  grafana:                         # 监控大屏，UI: http://localhost:3000（admin/admin）
-    image: grafana/grafana:13.0.11
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    volumes:
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro  # 数据源+大屏自动预置
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+networks:
+  car_net:
+    name: car_refactor_net
+    driver: bridge
 
-  jaeger:                          # 链路追踪，UI: http://localhost:16686
-    image: jaegertracing/all-in-one:1.76.0
-    ports:
-      - "16686:16686" # 查询 UI
-      - "4317:4317"   # OTLP gRPC 接收
-      - "4318:4318"   # OTLP HTTP 接收
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+volumes:
+  car_refactor_mysql_data:
+    name: car_refactor_mysql_data
+  car_refactor_redis_data:
+    name: car_refactor_redis_data
+  car_refactor_rabbitmq_data:
+    name: car_refactor_rabbitmq_data

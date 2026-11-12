@@ -2,194 +2,132 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
-	"backend-go/internal/cache"
-	"backend-go/internal/config"
-	"backend-go/internal/database"
-	"backend-go/internal/metrics"
-	"backend-go/internal/middleware"
-	"backend-go/internal/model"
-	"backend-go/internal/mq"
-	"backend-go/internal/router"
-	"backend-go/internal/service"
-	"backend-go/internal/simulator"
-	"backend-go/internal/tracing"
-	"backend-go/internal/ws"
-	"backend-go/pkg/logger"
-
-	"go.uber.org/zap"
-
-	_ "backend-go/docs" // swagger 生成的文档
+	"github.com/car-system/car-system/backend-go/internal/auth"
+	"github.com/car-system/car-system/backend-go/internal/commands"
+	"github.com/car-system/car-system/backend-go/internal/config"
+	"github.com/car-system/car-system/backend-go/internal/events"
+	"github.com/car-system/car-system/backend-go/internal/httpapi"
+	"github.com/car-system/car-system/backend-go/internal/mqttbroker"
+	"github.com/car-system/car-system/backend-go/internal/realtime"
+	"github.com/car-system/car-system/backend-go/internal/store"
+	"github.com/car-system/car-system/backend-go/internal/telemetry"
+	"github.com/redis/go-redis/v9"
 )
 
-// @title Car System 车联网后端 API
-// @version 1.0
-// @description 车联网系统后端接口文档：鉴权 / 车辆遥测 / 实时推送
-// @contact.name user20421
-// @host localhost:8080
-// @BasePath /
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description 格式: Bearer <token>
 func main() {
-	// 1. 加载配置
-	cfg, err := config.Load("config/config.yaml")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := run(); err != nil {
+		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
-
-	// 2. 初始化日志
-	logger.Init(cfg.Server.Mode)
-	defer logger.Sync()
-	logger.L.Info("car-system 后端启动中", zap.Int("port", cfg.Server.Port))
-
-	// 2.5 初始化链路追踪（Jaeger 未启动时静默重试，不阻塞服务）
-	traceShutdown, err := tracing.Init(context.Background(), "car-server", cfg.Telemetry.JaegerEndpoint)
-	if err != nil {
-		logger.L.Warn("链路追踪初始化失败，将继续运行（无追踪）", zap.Error(err))
-	} else {
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = traceShutdown(ctx)
-		}()
-		logger.L.Info("链路追踪已启用", zap.String("jaeger", cfg.Telemetry.JaegerEndpoint))
-	}
-
-	// 3. 初始化 JWT
-	middleware.InitJWT(cfg.JWT.Secret, cfg.JWT.ExpireDuration())
-
-	// 4. 初始化 MySQL（自动建库 + 迁移）
-	if err := database.Init(cfg.MySQL, cfg.Server.Mode); err != nil {
-		logger.L.Fatal("MySQL 初始化失败", zap.Error(err))
-	}
-	logger.L.Info("MySQL 就绪")
-
-	// 5. 初始化 Redis
-	if err := cache.Init(cfg.Redis); err != nil {
-		logger.L.Fatal("Redis 初始化失败", zap.Error(err))
-	}
-	logger.L.Info("Redis 就绪")
-
-	// 6. 初始化 RabbitMQ
-	if err := mq.Init(cfg.RabbitMQ); err != nil {
-		logger.L.Fatal("RabbitMQ 初始化失败", zap.Error(err))
-	}
-	logger.L.Info("RabbitMQ 就绪")
-
-	// 7. 种子数据：默认管理员 + 示例车辆
-	seedData()
-	service.SeedAlarmRules()
-
-	// 8. 死信记录钩子须在消费者启动前注入（启动窗口内耗尽重试的消息也要落表）
-	mq.OnDeadLetter = func(queue, exchange, routingKey, body, reason string) {
-		metrics.DeadLettersTotal.Inc()
-		if err := database.DB.Create(&model.DeadLetter{
-			Queue: queue, Exchange: exchange, RoutingKey: routingKey,
-			Body: body, Reason: reason,
-		}).Error; err != nil {
-			logger.L.Error("死信落表失败", zap.String("queue", queue), zap.Error(err))
-		}
-	}
-
-	// 8.1 启动遥测消费者（异步落库，断线自动恢复）
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go func() {
-		if err := mq.Client.ConsumeTelemetry(consumerCtx, service.PersistTelemetry); err != nil {
-			logger.L.Error("遥测消费者异常退出", zap.Error(err))
-		}
-	}()
-
-	// 8.1 启动控车指令分发消费者（MQ → WebSocket 推送给车机）
-	go func() {
-		if err := mq.Client.ConsumeControl(consumerCtx, "control.dispatch", nil, "control-dispatcher", service.DispatchCommand); err != nil {
-			logger.L.Error("控车分发消费者异常退出", zap.Error(err))
-		}
-	}()
-
-	// 8.3 启动 Outbox 投递器（控车指令 → MQ，断连恢复后自动补投）
-	go service.StartOutboxRelay(consumerCtx)
-
-	// 9. 启动 WebSocket Hub
-	go ws.GlobalHub.Run()
-
-	// 10. 启动 HTTP 服务（优雅启停）
-	r := router.Setup(cfg.Server.Mode)
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: r,
-		// 超时防护：慢客户端不能无限占用连接（WS 升级后连接被 hijack，不受此限制）
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		logger.L.Info("HTTP 服务已启动", zap.String("addr", srv.Addr))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.L.Fatal("HTTP 服务异常", zap.Error(err))
-		}
-	}()
-
-	// 等待退出信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logger.L.Info("收到退出信号，开始优雅关闭...")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.L.Error("HTTP 优雅关闭失败", zap.Error(err))
-	}
-
-	// 统一收尾：模拟器 → 消费者/Outbox → WS Hub → MQ → Redis → MySQL
-	simulator.Global.Stop()
-	consumerCancel()
-	ws.GlobalHub.Stop()
-	mq.Client.Close()
-	cache.Close()
-	database.Close()
-	logger.L.Info("服务已安全退出")
 }
-
-// seedData 初始化管理员、车主账号与示例车辆
-func seedData() {
-	var admin model.User
-	if err := database.DB.Where("username = ?", "admin").First(&admin).Error; err != nil {
-		hash, _ := bcrypt.GenerateFromPassword([]byte("admin123456"), bcrypt.DefaultCost)
-		admin = model.User{Username: "admin", PasswordHash: string(hash), Role: "admin"}
-		database.DB.Create(&admin)
-		logger.L.Info("已创建默认管理员 admin")
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
 	}
-	// 默认车主（车机端与车主 App 的登录账号）
-	var driver model.User
-	if err := database.DB.Where("username = ?", "driver1").First(&driver).Error; err != nil {
-		hash, _ := bcrypt.GenerateFromPassword([]byte("driver123456"), bcrypt.DefaultCost)
-		driver = model.User{Username: "driver1", PasswordHash: string(hash), Role: "owner"}
-		database.DB.Create(&driver)
-		logger.L.Info("已创建默认车主 driver1")
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
 	}
-	// 示例车辆归车主所有（归属校验要求：车机以 driver1 身份控车/回执）
-	var v model.Vehicle
-	if err := database.DB.Where("vin = ?", "LVSFACBE8MF012345").First(&v).Error; err != nil {
-		database.DB.Create(&model.Vehicle{
-			VIN: "LVSFACBE8MF012345", Model: "Car-System Demo EV",
-			OwnerID: driver.ID, Status: "online",
-		})
-		logger.L.Info("已创建示例车辆 LVSFACBE8MF012345")
-	} else if v.OwnerID != driver.ID {
-		database.DB.Model(&v).Update("owner_id", driver.ID)
-		logger.L.Info("示例车辆归属已迁移至 driver1（归属校验适配）")
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	db, err := store.Open(ctx, cfg)
+	if err != nil {
+		return err
 	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		return err
+	}
+	if err := db.Seed(ctx); err != nil {
+		return err
+	}
+	ca, err := os.ReadFile(cfg.CACertFile)
+	if err != nil {
+		return err
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(ca) {
+		return errors.New("invalid CA")
+	}
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, Username: cfg.Redis.User, Password: cfg.Redis.Password, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: hostOnly(cfg.Redis.Addr)}})
+	defer redisClient.Close()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		return err
+	}
+	bus, err := events.Dial(cfg.RabbitMQ.URL, cfg.CACertFile, logger)
+	if err != nil {
+		return err
+	}
+	defer bus.Close()
+	key, err := config.LoadOrCreateJWTKey(cfg.JWTKeyFile)
+	if err != nil {
+		return err
+	}
+	authService := auth.NewService(db, key, "car-system")
+	hub := realtime.NewHub()
+	tickets := realtime.NewTickets(time.Minute)
+	pipeline := telemetry.NewPipeline(db, redisClient, hub, cfg.TelemetryWorkers, cfg.TelemetryQueue, cfg.TelemetryBatch, logger)
+	defer pipeline.Close()
+	broker, err := mqttbroker.New(cfg, db, pipeline, hub, logger)
+	if err != nil {
+		return err
+	}
+	defer broker.Close()
+	dispatcher := commands.NewDispatcher(db, broker, hub, logger)
+	api := &httpapi.API{Store: db, Auth: authService, Redis: redisClient, Queue: bus, Tickets: tickets, Hub: hub, Pipeline: pipeline, PublicURL: cfg.PublicURL, Log: logger}
+	httpServer := &http.Server{Addr: cfg.HTTPAddr, Handler: api.Router(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, ClientCAs: roots, ClientAuth: tls.VerifyClientCertIfGiven, NextProtos: []string{"h2", "http/1.1"}}}
+	errCh := make(chan error, 4)
+	go func() {
+		logger.Info("MQTTS broker listening", "addr", cfg.MQTTAddr)
+		if err := broker.Serve(); err != nil {
+			errCh <- err
+		}
+	}()
+	go func() {
+		logger.Info("HTTPS server listening", "addr", cfg.HTTPAddr)
+		errCh <- httpServer.ListenAndServeTLS(cfg.HTTPCertFile, cfg.HTTPKeyFile)
+	}()
+	go bus.Relay(ctx, db)
+	go dispatcher.ExpireLoop(ctx)
+	go func() {
+		if err := bus.Consume(ctx, dispatcher); err != nil && ctx.Err() == nil {
+			errCh <- err
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		logger.Info("shutdown requested")
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			stop()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			_ = httpServer.Shutdown(shutdownCtx)
+			return err
+		}
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return httpServer.Shutdown(shutdownCtx)
+}
+func hostOnly(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
 }

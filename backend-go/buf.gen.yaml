@@ -1,0 +1,11 @@
+version: v1
+managed:
+  enabled: true
+  override:
+    GO_PACKAGE:
+      default: github.com/car-system/car-system/backend-go/pkg/vehiclev1
+plugins:
+  - name: go
+    path: .bin/protoc-gen-go.exe
+    out: pkg/vehiclev1
+    opt: paths=source_relative

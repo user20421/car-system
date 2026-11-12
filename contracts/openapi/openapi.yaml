@@ -1,0 +1,654 @@
+openapi: 3.0.3
+info:
+  title: Car System API
+  version: 1.0.0
+  description: Refactored multi-user, multi-vehicle API contract. User APIs use JWT; device APIs use mTLS with the VIN in the certificate CN.
+servers:
+  - url: https://localhost:8443
+    description: Local HTTPS development server
+tags:
+  - name: Auth
+  - name: Vehicles
+  - name: Commands
+  - name: Alerts
+  - name: Realtime
+  - name: Device
+  - name: System
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange user credentials for tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate an access and refresh token pair
+      security: []
+      requestBody:
+        required: false
+        description: Native clients send refresh_token JSON; browsers may use the HttpOnly Secure SameSite=Strict refresh cookie with X-Request-ID.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: Tokens rotated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current session and refresh token
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204': { description: Logged out }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/vehicles:
+    get:
+      tags: [Vehicles]
+      summary: List vehicles accessible to the current user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Accessible vehicles
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VehicleList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/vehicles/{vin}:
+    get:
+      tags: [Vehicles]
+      summary: Get vehicle details and the caller's access role
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VIN'
+      responses:
+        '200':
+          description: Vehicle details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehicle' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/vehicles/{vin}/telemetry/latest:
+    get:
+      tags: [Vehicles]
+      summary: Get the latest cached telemetry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VIN'
+      responses:
+        '200':
+          description: Latest telemetry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Telemetry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/vehicles/{vin}/telemetry/history:
+    get:
+      tags: [Vehicles]
+      summary: Query persisted telemetry in an inclusive time range
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VIN'
+        - name: from_ms
+          in: query
+          required: true
+          schema: { type: integer, format: int64, example: 1767225600000 }
+        - name: to_ms
+          in: query
+          required: true
+          schema: { type: integer, format: int64, example: 1767225660000 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Telemetry ordered by occurred_at_ms ascending
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TelemetryHistory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/vehicles/{vin}/commands:
+    post:
+      tags: [Commands]
+      summary: Create an idempotent vehicle command
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VIN'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCommandRequest' }
+      responses:
+        '202':
+          description: Command accepted for delivery
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Command' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/vehicles/{vin}/commands/{command_id}:
+    get:
+      tags: [Commands]
+      summary: Get command delivery and execution state
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VIN'
+        - name: command_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Command state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Command' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts for vehicles accessible to the current user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: vin
+          in: query
+          schema: { type: string, minLength: 17, maxLength: 17 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, acknowledged] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Matching alerts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/alerts/{alert_id}/ack:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge an alert for the current user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcknowledgeAlertRequest' }
+      responses:
+        '200':
+          description: Acknowledged alert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/v1/ws-ticket:
+    post:
+      tags: [Realtime]
+      summary: Issue a short-lived, single-use WSS ticket
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Ticket created; it must be redeemed once at the WSS endpoint
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WSTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/device/config:
+    get:
+      tags: [Device]
+      summary: Get configuration for the mTLS-authenticated vehicle
+      security: [{ deviceMTLS: [] }]
+      responses:
+        '200':
+          description: Device configuration
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceConfig' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/device/ota/latest:
+    get:
+      tags: [Device]
+      summary: Get the latest applicable OTA release
+      security: [{ deviceMTLS: [] }]
+      parameters:
+        - name: current_version
+          in: query
+          required: true
+          schema: { type: string, example: 1.2.0 }
+      responses:
+        '200':
+          description: Update availability; release is null when no update applies
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OTALatest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/device/telemetry/batch:
+    post:
+      tags: [Device]
+      summary: Idempotently upload telemetry collected while offline
+      security: [{ deviceMTLS: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelemetryBatch' }
+      responses:
+        '202':
+          description: Batch accepted for persistence; duplicates may be ignored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness and dependency health
+      security: []
+      responses:
+        '200':
+          description: All required dependencies are healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: At least one required dependency is unavailable
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User access token. Refresh tokens are accepted only by the refresh endpoint.
+    deviceMTLS:
+      type: mutualTLS
+      description: Client certificate signed by the device CA; certificate CN must equal the provisioned VIN.
+  parameters:
+    VIN:
+      name: vin
+      in: path
+      required: true
+      schema: { type: string, minLength: 17, maxLength: 17, example: LTEST000000000001 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing, invalid, expired, or revoked credentials
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Authenticated caller lacks access to the vehicle or operation
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource not found or not visible to the caller
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Idempotency or resource-state conflict
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: Batch exceeds the configured item or byte limit
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, request_id]
+      properties:
+        type: { type: string, format: uri, example: 'https://example.com/problems/validation' }
+        title: { type: string, example: Request validation failed }
+        status: { type: integer, example: 400 }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+        code: { type: string, example: VALIDATION_ERROR }
+        request_id: { type: string, example: 01HF7YAT31SHGZ6Y6N5K7F0P5N }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 8, maxLength: 256, format: password }
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token: { type: string, minLength: 1 }
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer, minimum: 1, example: 900 }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      required: [id, username, display_name, roles, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        roles:
+          type: array
+          items: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+    Vehicle:
+      type: object
+      required: [vin, display_name, model, owner_user_id, access_role, created_at]
+      properties:
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        display_name: { type: string }
+        model: { type: string }
+        model_year: { type: integer, minimum: 1900, maximum: 2200 }
+        owner_user_id: { type: string, format: uuid }
+        access_role: { type: string, enum: [owner, driver, viewer] }
+        firmware_version: { type: string }
+        created_at: { type: string, format: date-time }
+    VehicleList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Vehicle' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+    PageMeta:
+      type: object
+      required: [number, size, total_items, total_pages]
+      properties:
+        number: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1 }
+        total_items: { type: integer, minimum: 0 }
+        total_pages: { type: integer, minimum: 0 }
+    Location:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180 }
+        altitude_m: { type: number, format: double }
+        heading_deg: { type: number, format: double, minimum: 0, maximum: 360 }
+        horizontal_accuracy_m: { type: number, format: double, minimum: 0 }
+    HvacState:
+      type: object
+      properties:
+        mode: { type: string, enum: [off, auto, cool, heat] }
+        target_temp_c: { type: number, format: double }
+        fan_level: { type: integer, minimum: 0 }
+        ac_on: { type: boolean }
+        recirculation: { type: boolean }
+    Fault:
+      type: object
+      required: [code, severity, active]
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [info, warning, critical] }
+        message: { type: string }
+        active: { type: boolean }
+    Telemetry:
+      type: object
+      required: [vin, device_boot_id, sequence, occurred_at_ms, speed_kph, rpm, battery_percent, range_km, locked, defrost, fault]
+      properties:
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        device_boot_id: { type: string }
+        sequence: { type: integer, format: int64, minimum: 0 }
+        occurred_at_ms: { type: integer, format: int64 }
+        received_at_ms: { type: integer, format: int64 }
+        speed_kph: { type: number, format: double, minimum: 0 }
+        rpm: { type: integer, minimum: 0 }
+        battery_percent: { type: number, format: double, minimum: 0, maximum: 100 }
+        range_km: { type: number, format: double, minimum: 0 }
+        location: { $ref: '#/components/schemas/Location' }
+        locked: { type: boolean }
+        hvac: { $ref: '#/components/schemas/HvacState' }
+        cabin_temp_c: { type: number, format: double }
+        defrost: { type: boolean }
+        fault:
+          type: array
+          items: { $ref: '#/components/schemas/Fault' }
+    TelemetryHistory:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Telemetry' }
+        next_cursor: { type: string, nullable: true }
+    CreateCommandRequest:
+      type: object
+      required: [idempotency_key, expires_at_ms, type, params]
+      properties:
+        idempotency_key: { type: string, minLength: 8, maxLength: 128 }
+        expires_at_ms: { type: integer, format: int64 }
+        type:
+          type: string
+          enum: [lock, unlock, hvac_on, hvac_off, set_temperature, defrost_on, defrost_off, honk_flash]
+        params:
+          type: object
+          additionalProperties: { type: string }
+          example: { target_temp_c: '22.0' }
+    Command:
+      type: object
+      required: [command_id, vin, requested_by, idempotency_key, expires_at_ms, type, params, status, created_at_ms, updated_at_ms]
+      properties:
+        command_id: { type: string, format: uuid }
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        requested_by: { type: string, format: uuid }
+        idempotency_key: { type: string }
+        expires_at_ms: { type: integer, format: int64 }
+        type: { type: string }
+        params:
+          type: object
+          additionalProperties: { type: string }
+        status: { type: string, enum: [pending, sent, received, succeeded, failed, expired] }
+        error:
+          allOf: [{ $ref: '#/components/schemas/CommandError' }]
+          nullable: true
+        created_at_ms: { type: integer, format: int64 }
+        updated_at_ms: { type: integer, format: int64 }
+    CommandError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        retryable: { type: boolean }
+        details:
+          type: object
+          additionalProperties: { type: string }
+    Alert:
+      type: object
+      required: [id, vin, code, title, severity, status, occurred_at_ms]
+      properties:
+        id: { type: string, format: uuid }
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        code: { type: string }
+        title: { type: string }
+        severity: { type: string, enum: [info, warning, critical] }
+        status: { type: string, enum: [open, acknowledged] }
+        occurred_at_ms: { type: integer, format: int64 }
+        acknowledged_by: { type: string, format: uuid, nullable: true }
+        acknowledged_at_ms: { type: integer, format: int64, nullable: true }
+        acknowledgement_note: { type: string, nullable: true }
+    AlertList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Alert' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+    AcknowledgeAlertRequest:
+      type: object
+      properties:
+        note: { type: string, maxLength: 1000 }
+    WSTicket:
+      type: object
+      required: [ticket, expires_at_ms, websocket_url]
+      properties:
+        ticket: { type: string, minLength: 32 }
+        expires_at_ms: { type: integer, format: int64 }
+        websocket_url: { type: string, format: uri, example: 'wss://localhost:8443/api/v1/ws' }
+    DeviceConfig:
+      type: object
+      required: [vin, config_version, telemetry_interval_ms, config_poll_interval_ms, updated_at_ms]
+      properties:
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        config_version: { type: integer, format: int64, minimum: 1 }
+        telemetry_interval_ms: { type: integer, minimum: 100 }
+        config_poll_interval_ms: { type: integer, minimum: 1000 }
+        mqtt_topic_version: { type: string, enum: [v1] }
+        updated_at_ms: { type: integer, format: int64 }
+    OTALatest:
+      type: object
+      required: [update_available, release]
+      properties:
+        update_available: { type: boolean }
+        release:
+          allOf: [{ $ref: '#/components/schemas/OTARelease' }]
+          nullable: true
+    OTARelease:
+      type: object
+      required: [version, url, sha256, size_bytes, mandatory, released_at_ms]
+      properties:
+        version: { type: string }
+        url: { type: string, format: uri }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        size_bytes: { type: integer, format: int64, minimum: 1 }
+        mandatory: { type: boolean }
+        release_notes: { type: string }
+        released_at_ms: { type: integer, format: int64 }
+    TelemetryBatch:
+      type: object
+      required: [batch_id, vin, device_boot_id, items]
+      properties:
+        batch_id: { type: string, minLength: 8, maxLength: 128 }
+        vin: { type: string, minLength: 17, maxLength: 17 }
+        device_boot_id: { type: string }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: '#/components/schemas/Telemetry' }
+    BatchAccepted:
+      type: object
+      required: [batch_id, accepted, duplicates]
+      properties:
+        batch_id: { type: string }
+        accepted: { type: integer, minimum: 0 }
+        duplicates: { type: integer, minimum: 0 }
+    Health:
+      type: object
+      required: [status, version, checks]
+      properties:
+        status: { type: string, enum: [ok] }
+        version: { type: string }
+        checks:
+          type: object
+          required: [mysql, redis, rabbitmq]
+          properties:
+            mysql: { type: string, enum: [up, down] }
+            redis: { type: string, enum: [up, down] }
+            rabbitmq: { type: string, enum: [up, down] }

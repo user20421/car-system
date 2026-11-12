@@ -1,5 +1,9 @@
 @echo off
 chcp 65001 >nul
-title Car-System 一键启动
-powershell -ExecutionPolicy Bypass -File "%~dp0start-all.ps1"
-pause
+cd /d "%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-all.ps1" %*
+if errorlevel 1 (
+  echo.
+  echo 启动失败，请根据上方错误信息处理。
+  pause
+)

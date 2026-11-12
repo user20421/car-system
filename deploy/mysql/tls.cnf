@@ -1,0 +1,9 @@
+[mysqld]
+require_secure_transport=ON
+ssl_ca=/etc/mysql/tls/ca.crt
+ssl_cert=/etc/mysql/tls/mysql-server.crt
+ssl_key=/etc/mysql/tls/mysql-server.key
+tls_version=TLSv1.2,TLSv1.3
+
+[client]
+ssl-mode=VERIFY_IDENTITY

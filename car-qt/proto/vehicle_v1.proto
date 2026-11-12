@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package car.vehicle.v1;
+
+option go_package = "github.com/car-system/car-system/contracts/gen/go/vehicle/v1;vehiclev1";
+option cc_enable_arenas = true;
+
+// Envelope is mandatory on every MQTT payload. occurred_at_ms is Unix time in UTC.
+message Envelope {
+  string version = 1;         // Contract version; currently "v1".
+  string message_id = 2;      // Globally unique message identifier (UUID recommended).
+  string vin = 3;             // Vehicle identification number; also present in topic.
+  string device_boot_id = 4;  // Changes on each device boot; detects sequence resets.
+  uint64 sequence = 5;        // Monotonically increasing within device_boot_id.
+  int64 occurred_at_ms = 6;   // Event time at the device, not broker ingestion time.
+}
+
+message Location {
+  double latitude = 1;
+  double longitude = 2;
+  double altitude_m = 3;
+  double heading_deg = 4;
+  double horizontal_accuracy_m = 5;
+}
+
+message HvacState {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_OFF = 1;
+    MODE_AUTO = 2;
+    MODE_COOL = 3;
+    MODE_HEAT = 4;
+  }
+  Mode mode = 1;
+  double target_temp_c = 2;
+  uint32 fan_level = 3;
+  bool ac_on = 4;
+  bool recirculation = 5;
+}
+
+message Fault {
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    SEVERITY_INFO = 1;
+    SEVERITY_WARNING = 2;
+    SEVERITY_CRITICAL = 3;
+  }
+  string code = 1;
+  Severity severity = 2;
+  string message = 3;
+  bool active = 4;
+}
+
+message Telemetry {
+  Envelope envelope = 1;
+  double speed_kph = 2;
+  uint32 rpm = 3;
+  double battery_percent = 4; // 0..100
+  double range_km = 5;
+  Location location = 6;
+  bool locked = 7;
+  HvacState hvac = 8;
+  double cabin_temp_c = 9;
+  bool defrost = 10;
+  repeated Fault fault = 11;
+}
+
+enum CommandType {
+  COMMAND_TYPE_UNSPECIFIED = 0;
+  COMMAND_TYPE_LOCK = 1;
+  COMMAND_TYPE_UNLOCK = 2;
+  COMMAND_TYPE_HVAC_ON = 3;
+  COMMAND_TYPE_HVAC_OFF = 4;
+  COMMAND_TYPE_SET_TEMPERATURE = 5;
+  COMMAND_TYPE_DEFROST_ON = 6;
+  COMMAND_TYPE_DEFROST_OFF = 7;
+  COMMAND_TYPE_HONK_FLASH = 8;
+}
+
+message Command {
+  Envelope envelope = 1;
+  string command_id = 2;
+  string idempotency_key = 3;
+  int64 expires_at_ms = 4;
+  CommandType type = 5;
+  map<string, string> params = 6; // Values are encoded as strings for forward compatibility.
+}
+
+message CommandError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  map<string, string> details = 4;
+}
+
+message CommandAck {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_RECEIVED = 1;   // Device accepted the command for execution.
+    STATUS_SUCCEEDED = 2; // Terminal success.
+    STATUS_FAILED = 3;    // Terminal failure; error should be populated.
+    STATUS_EXPIRED = 4;   // Terminal rejection because expires_at_ms passed.
+  }
+  Envelope envelope = 1;
+  string command_id = 2;
+  Status status = 3;
+  CommandError error = 4;
+}
+
+message Presence {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_ONLINE = 1;
+    STATE_OFFLINE = 2;
+  }
+  Envelope envelope = 1;
+  State state = 2;
+  string connection_id = 3;
+  string firmware_version = 4;
+  string ip_address = 5; // Optional; omit on untrusted clients.
+}
+
+// TelemetryBatch is used by the HTTPS batch endpoint. Each item keeps its own
+// Envelope so event time and sequence are preserved when uploaded after offline storage.
+message TelemetryBatch {
+  Envelope envelope = 1; // Batch metadata; sequence identifies the batch itself.
+  string batch_id = 2;   // Idempotency key assigned by the device.
+  repeated Telemetry items = 3;
+}

@@ -1,25 +1,32 @@
-﻿# 车机模拟器启动脚本（本地开发用）
-# 原理：把 Qt 运行时 bin 目录临时加入 PATH，再启动程序
-param(
-    [string]$QtRoot = "D:\software\Qt\6.11.2\llvm-mingw_64"   # Qt 安装目录（可用 -QtRoot 覆盖）
+﻿param(
+    [string]$QtRoot = $(if ($env:QT6_ROOT) { $env:QT6_ROOT } else { 'D:\software\Qt\6.11.2\llvm-mingw_64' }),
+    [string]$CompilerRoot = $(if ($env:LLVM_MINGW_ROOT) { $env:LLVM_MINGW_ROOT } else { 'D:\software\Qt\Tools\llvm-mingw1706_64' }),
+    [string]$MqttRoot = $(if ($env:QTMQTT_ROOT) { $env:QTMQTT_ROOT } else { "$PSScriptRoot\..\.tools\qtmqtt-install" }),
+    [string]$ProtocRoot = $(if ($env:PROTOC_ROOT) { $env:PROTOC_ROOT } else { "$PSScriptRoot\..\.tools\protoc" }),
+    [string]$Vin = 'LTEST000000000001',
+    [string]$Config = '',
+    [switch]$Build,
+    [switch]$DebugPanel
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+$root = $PSScriptRoot
+$buildDir = Join-Path $root 'build'
+$qtBin = Join-Path $QtRoot 'bin'
+$env:PATH = "$CompilerRoot\bin;$MqttRoot\bin;$qtBin;$ProtocRoot\bin;$env:PATH"
 
-$qtBin = "$QtRoot\bin"
-if (-not (Test-Path "$qtBin\Qt6Core.dll")) {
-    Write-Host "❌ Qt 运行时未找到：$qtBin（请用 -QtRoot 指定正确路径）" -ForegroundColor Red
-    pause
-    exit 1
+if ($Build -or -not (Test-Path (Join-Path $buildDir 'aurora.exe'))) {
+    $ninja = Get-Command ninja -ErrorAction Stop
+    cmake -S $root -B $buildDir -G Ninja -DCMAKE_BUILD_TYPE=Debug `
+        "-DCMAKE_PREFIX_PATH=$($MqttRoot -replace '\\','/');$($QtRoot -replace '\\','/')" `
+        "-DCMAKE_CXX_COMPILER=$($CompilerRoot -replace '\\','/')/bin/clang++.exe"
+    if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+    cmake --build $buildDir --parallel 4
+    if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 }
 
-$exe = "$PSScriptRoot\build\car-qt.exe"
-if (-not (Test-Path $exe)) {
-    Write-Host "❌ 车机程序不存在：$exe（请先执行 cmake --build build）" -ForegroundColor Red
-    pause
-    exit 1
-}
-
-$env:Path = "$qtBin;" + $env:Path
-Start-Process $exe
-Write-Host "车机模拟器已启动（仪表盘窗口应已弹出）" -ForegroundColor Green
+$arguments = @('--vin', $Vin, '--cert-dir', (Resolve-Path "$root\..\deploy\certs").Path)
+if ($Config) { $arguments += @('--config', $Config) }
+if ($DebugPanel) { $arguments += '--debug' }
+& (Join-Path $buildDir 'aurora.exe') @arguments
+exit $LASTEXITCODE
